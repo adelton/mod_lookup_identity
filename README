@@ -1,0 +1,55 @@
+
+Apache module mod_lookup_identity
+=================================
+
+Apache module to retrieve additional information about the
+authenticated user.
+
+It retrieves the GECOS information using the getpwnam call and store
+it in a note/environment variable (by default REMOTE_USER_GECOS).
+It gets list of group names the user belongs using getgrouplist and
+getgrgid calls and stores it in a note/environment variable (by
+default REMOTE_USER_GROUPS, space separated).
+
+The module needs to be loaded into Apache's configuration file like
+/etc/httpd/conf/httpd.conf with directive like
+
+    LoadModule lookup_identity_module modules/mod_lookup_identity.so
+
+The default behaviour can be changed with the following directives:
+
+    LookupOutput where_to_store_results
+	
+	Specifies if the lookups will be done at all and where the results
+	of the lookup will be stored. Possible values are:
+
+	    None: Disable the lookup altogether
+	    Notes: Sets the Apache notes table only
+	    Env: Sets environment variables only
+	    All: Sets both (the default) 
+
+    LookupOutputGECOS name_of_the_note/environment_variable_for_the_GECOS_result
+
+	Default is REMOTE_USER_GECOS
+
+    LookupOutputGroups name_of_the_note/environment_variable_for_the_group_list
+
+	Default is REMOTE_USER_GROUPS
+
+    LookupOutputGroupsSeparator the_separator
+
+	Default is single space
+
+Of course, if sssd is configured on the machine, it will do the
+lookup for us but the standard Unix calls are the interface for us at
+this point.
+
+Building from sources
+---------------------
+
+When building from sources, command
+
+    apxs -i -a -c mod_lookup_identity.c
+
+should build and install the module.
+
