@@ -21,7 +21,7 @@ static const int LOOKUP_IDENTITY_OUTPUT_DEFAULT = 4;
 
 static char * LOOKUP_IDENTITY_OUTPUT_GECOS = "REMOTE_USER_GECOS";
 static char * LOOKUP_IDENTITY_OUTPUT_GROUPS = "REMOTE_USER_GROUPS";
-static char * LOOKUP_IDENTITY_OUTPUT_GROUPS_SEP = " ";
+static char * LOOKUP_IDENTITY_OUTPUT_GROUPS_SEP = ":";
 
 typedef struct lookup_identity_config {
 	char * context;

@@ -9,7 +9,7 @@ It retrieves the GECOS information using the getpwnam call and store
 it in a note/environment variable (by default REMOTE_USER_GECOS).
 It gets list of group names the user belongs using getgrouplist and
 getgrgid calls and stores it in a note/environment variable (by
-default REMOTE_USER_GROUPS, space separated).
+default REMOTE_USER_GROUPS, colon separated).
 
 The module needs to be loaded into Apache's configuration file like
 /etc/httpd/conf/httpd.conf with directive like
@@ -38,7 +38,7 @@ The default behaviour can be changed with the following directives:
 
     LookupOutputGroupsSeparator the_separator
 
-	Default is single space
+	Default is single colon
 
 Of course, if sssd is configured on the machine, it will do the
 lookup for us but the standard Unix calls are the interface for us at
