@@ -60,3 +60,11 @@ When building from sources, command
 
 should build and install the module.
 
+If the available version of libsss_nss_idmap does not support the
+sss_lookup_user_get_attr call, compile with
+
+    apxs -DNO_USER_ATTR -i -a -c mod_lookup_identity.c -Wall -pedantic
+
+In that case, the LookupUserAttr functionality will not be compiled
+in and will not be available.
+
