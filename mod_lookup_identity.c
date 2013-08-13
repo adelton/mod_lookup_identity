@@ -142,8 +142,7 @@ const char * set_output_gecos(cmd_parms * cmd, void * conf_void, const char * ar
 		if (!strcmp(arg, "default")) {
 			cfg->output_gecos = LOOKUP_IDENTITY_OUTPUT_GECOS;
 		} else {
-			cfg->output_gecos = apr_palloc(cmd->pool, strlen(arg) + 1);
-			strcpy(cfg->output_gecos, arg);
+			cfg->output_gecos = apr_pstrdup(cmd->pool, arg);
 		}
 	}
 	return NULL;
@@ -155,8 +154,7 @@ const char * set_output_groups(cmd_parms * cmd, void * conf_void, const char * a
 		if (!strcmp(arg, "default")) {
 			cfg->output_groups = LOOKUP_IDENTITY_OUTPUT_GROUPS;
 		} else {
-			cfg->output_groups = apr_palloc(cmd->pool, strlen(arg) + 1);
-			strcpy(cfg->output_groups, arg);
+			cfg->output_groups = apr_pstrdup(cmd->pool, arg);
 		}
 	}
 	return NULL;
@@ -168,8 +166,7 @@ const char * set_output_groups_separator(cmd_parms * cmd, void * conf_void, cons
 		if (!strcmp(arg, "default")) {
 			cfg->output_groups_sep = LOOKUP_IDENTITY_OUTPUT_GROUPS_SEP;
 		} else {
-			cfg->output_groups_sep = apr_palloc(cmd->pool, strlen(arg) + 1);
-			strcpy(cfg->output_groups_sep, arg);
+			cfg->output_groups_sep = apr_pstrdup(cmd->pool, arg);
 		}
 	}
 	return NULL;
@@ -194,8 +191,7 @@ void * create_dir_conf(apr_pool_t * pool, char * context) {
 	lookup_identity_config * cfg = create_common_conf(pool);
 	if (cfg) {
 		context = context ? context : "(no directory context)";
-		cfg->context = apr_palloc(pool, strlen(context) + 1);
-		strcpy(cfg->context, context);
+		cfg->context = apr_pstrdup(pool, context);
 	}
 	return cfg;
 }
