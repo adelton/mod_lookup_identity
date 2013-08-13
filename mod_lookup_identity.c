@@ -13,6 +13,8 @@
 #include <pwd.h>
 #include <grp.h>
 
+#include <sss_nss_idmap.h>
+
 static const int LOOKUP_IDENTITY_OUTPUT_NONE = 0;
 static const int LOOKUP_IDENTITY_OUTPUT_NOTES = 1;
 static const int LOOKUP_IDENTITY_OUTPUT_ENV = 2;
@@ -29,6 +31,7 @@ typedef struct lookup_identity_config {
 	char * output_gecos;
 	char * output_groups;
 	char * output_groups_sep;
+	apr_hash_t * output_user_attr;
 } lookup_identity_config;
 
 module AP_MODULE_DECLARE_DATA lookup_identity_module;
@@ -117,6 +120,42 @@ static int lookup_identity_hook(request_rec * r) {
 		apr_table_set(r->subprocess_env, the_config.output_gecos, pwd->pw_gecos);
 	}
 
+	if (cfg && cfg->output_user_attr) {
+		if (srv_cfg && srv_cfg->output_user_attr) {
+			the_config.output_user_attr = apr_hash_overlay(r->pool, cfg->output_user_attr, srv_cfg->output_user_attr);
+		} else {
+			the_config.output_user_attr = cfg->output_user_attr;
+		}
+	} else if (srv_cfg && srv_cfg->output_user_attr) {
+		the_config.output_user_attr = srv_cfg->output_user_attr;
+	} else {
+		the_config.output_user_attr = NULL;
+	}
+
+	if (the_config.output_user_attr) {
+		apr_hash_index_t * hi = apr_hash_first(r->pool, the_config.output_user_attr);
+		while (hi) {
+			const void * key;
+			void * value;
+			apr_hash_this(hi, &key, NULL, &value);
+			struct sss_attr * sss_data = NULL;
+			int ret = sss_lookup_user_get_attr(r->user, key, &sss_data);
+			if (ret == 0 && sss_data->num) {
+				if (the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
+					apr_table_set(r->notes, value, (char *)sss_data->values[0]->val);
+				}
+
+				if (the_config.output & LOOKUP_IDENTITY_OUTPUT_ENV) {
+					apr_table_set(r->subprocess_env, value, (char *)sss_data->values[0]->val);
+				}
+			}
+			if (sss_data) {
+				sss_attr_free(sss_data);
+			}
+			hi = apr_hash_next(hi);
+		}
+	}
+
 	return OK;
 }
 
@@ -172,6 +211,19 @@ const char * set_output_groups_separator(cmd_parms * cmd, void * conf_void, cons
 	return NULL;
 }
 
+const char * set_user_attr(cmd_parms * cmd, void * conf_void, const char * attrib, const char * output) {
+	lookup_identity_config * cfg = (lookup_identity_config *) conf_void;
+	if (cfg) {
+		if (!cfg->output_user_attr) {
+			cfg->output_user_attr = apr_hash_make(cmd->pool);
+		}
+	        char * key = apr_pstrdup(cmd->pool, attrib);
+	        char * value = apr_pstrdup(cmd->pool, output);
+	        apr_hash_set(cfg->output_user_attr, key, APR_HASH_KEY_STRING, value);
+	}
+	return NULL;
+}
+
 lookup_identity_config * create_common_conf(apr_pool_t * pool) {
 	lookup_identity_config * cfg = apr_pcalloc(pool, sizeof(lookup_identity_config));
 	if (cfg) {
@@ -204,6 +256,15 @@ void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_void) {
 	cfg->output_gecos = add->output_gecos ? add->output_gecos : base->output_gecos;
 	cfg->output_groups = add->output_groups ? add->output_groups : base->output_groups;
 	cfg->output_groups_sep = add->output_groups_sep ? add->output_groups_sep : base->output_groups_sep;
+	if (base->output_user_attr) {
+		if (add->output_user_attr) {
+			cfg->output_user_attr = apr_hash_overlay(pool, add->output_user_attr, base->output_user_attr);
+		} else {
+			cfg->output_user_attr = apr_hash_copy(pool, base->output_user_attr);
+		}
+	} else if (add->output_user_attr) {
+		cfg->output_user_attr = apr_hash_copy(pool, add->output_user_attr);
+	}
 	return cfg;
 }
 
@@ -212,6 +273,7 @@ static const command_rec directives[] = {
 	AP_INIT_TAKE1("LookupOutputGECOS", set_output_gecos, NULL, RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the GECOS information"),
 	AP_INIT_TAKE1("LookupOutputGroups", set_output_groups, NULL, RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the group information"),
 	AP_INIT_TAKE1("LookupOutputGroupsSeparator", set_output_groups_separator, NULL, RSRC_CONF | ACCESS_CONF, "Group information separator"),
+	AP_INIT_TAKE2("LookupUserAttr", set_user_attr, NULL, RSRC_CONF | ACCESS_CONF, "Additional user attributes"),
 	{ NULL }
 };
 
