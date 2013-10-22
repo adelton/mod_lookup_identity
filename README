@@ -56,12 +56,13 @@ Building from sources
 
 When building from sources, command
 
-    apxs -i -a -c mod_lookup_identity.c -lsss_nss_idmap -Wall -pedantic
+    apxs -i -a -c $(pkg-config --cflags dbus-1) \
+	mod_lookup_identity.c $(pkg-config --libs dbus-1) -Wall -pedantic
 
 should build and install the module.
 
-If the available version of libsss_nss_idmap does not support the
-sss_lookup_user_get_attr call, compile with
+If the available version of sssd does not provide or is not configured
+to provide the itp dbus service, compile with
 
     apxs -DNO_USER_ATTR -i -a -c mod_lookup_identity.c -Wall -pedantic
 

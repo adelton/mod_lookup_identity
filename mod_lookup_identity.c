@@ -14,7 +14,12 @@
 #include <grp.h>
 
 #ifndef NO_USER_ATTR
-#include <sss_nss_idmap.h>
+#include <dbus/dbus.h>
+#define DBUS_SSSD_PATH "/org/freedesktop/sssd/infopipe"
+#define DBUS_SSSD_GET_USER_ATTR_IFACE "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_GET_USER_ATTR_METHOD "GetUserAttr"
+#define DBUS_SSSD_GET_USER_ATTR_DEST "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_TIMEOUT 5000
 #endif
 
 static const int LOOKUP_IDENTITY_OUTPUT_NONE = 0;
@@ -138,27 +143,88 @@ static int lookup_identity_hook(request_rec * r) {
 	}
 
 	if (the_config.output_user_attr) {
-		apr_hash_index_t * hi = apr_hash_first(r->pool, the_config.output_user_attr);
-		while (hi) {
-			const void * key;
-			void * value;
-			apr_hash_this(hi, &key, NULL, &value);
-			struct sss_attr * sss_data = NULL;
-			int ret = sss_lookup_user_get_attr(r->user, key, &sss_data);
-			if (ret == 0 && sss_data->num) {
-				if (the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
-					apr_table_set(r->notes, value, (char *)sss_data->values[0]->val);
-				}
+		DBusError error;
+		dbus_error_init(&error);
+		DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
+		if (! connection) {
+			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+				"Error connecting to system dbus: %s", error.message);
+		} else {
+			dbus_connection_set_exit_on_disconnect(connection, FALSE);
+			const char * x_user = r->user;
+			apr_hash_index_t * hi = apr_hash_first(r->pool, the_config.output_user_attr);
+			while (hi) {
+				const void * key;
+				void * value;
+				apr_hash_this(hi, &key, NULL, &value);
+				hi = apr_hash_next(hi);
 
-				if (the_config.output & LOOKUP_IDENTITY_OUTPUT_ENV) {
-					apr_table_set(r->subprocess_env, value, (char *)sss_data->values[0]->val);
+				DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_GET_USER_ATTR_DEST,
+					DBUS_SSSD_PATH,
+					DBUS_SSSD_GET_USER_ATTR_IFACE,
+					DBUS_SSSD_GET_USER_ATTR_METHOD);
+				if (! message) {
+					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error allocating dbus message");
+					continue;
 				}
+				dbus_message_set_auto_start(message, TRUE);
+
+				DBusMessageIter iter;
+				dbus_message_iter_init_append(message, &iter);
+				dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &x_user);
+				dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &key);
+
+				DBusMessage * reply = dbus_connection_send_with_reply_and_block(connection,
+					message, DBUS_SSSD_TIMEOUT, &error);
+				dbus_message_unref(message);
+				if (dbus_error_is_set(&error)) {
+					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+						"Error calling %s(%s, %s): %s: %s",
+						DBUS_SSSD_GET_USER_ATTR_METHOD, x_user, (char *)key,
+						error.name, error.message);
+					dbus_error_free(&error);
+					continue;
+				}
+				/* reply populated */
+				int reply_type = dbus_message_get_type(reply);
+				if (reply_type == DBUS_MESSAGE_TYPE_ERROR) {
+					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+						"Error %s calling %s(%s, %s)",
+						dbus_message_get_error_name(reply),
+						DBUS_SSSD_GET_USER_ATTR_METHOD, x_user, (char *)key);
+					dbus_message_unref(reply);
+					continue;
+				}
+				if (reply_type != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
+					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+						"Unexpected reply type %d calling %s(%s, %s)", reply_type,
+						DBUS_SSSD_GET_USER_ATTR_METHOD, x_user, (char *)key);
+					dbus_message_unref(reply);
+					continue;
+				}
+				/* reply_type == DBUS_MESSAGE_TYPE_METHOD_RETURN */
+				dbus_message_iter_init(reply, &iter);
+				int type = dbus_message_iter_get_arg_type(&iter);
+				char * r_value;
+				if (type == DBUS_TYPE_ARRAY) {
+					DBusMessageIter subiter;
+					dbus_message_iter_recurse(&iter, &subiter);
+					type = dbus_message_iter_get_arg_type(&subiter);
+					if (type == DBUS_TYPE_STRING) {
+						dbus_message_iter_get_basic(&subiter, &r_value);
+						if (the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
+							apr_table_set(r->notes, value, r_value);
+						}
+						if (the_config.output & LOOKUP_IDENTITY_OUTPUT_ENV) {
+							apr_table_set(r->subprocess_env, value, r_value);
+						}
+					}
+				}
+				dbus_message_unref(reply);
 			}
-			if (sss_data) {
-				sss_attr_free(sss_data);
-			}
-			hi = apr_hash_next(hi);
+			dbus_connection_unref(connection);
 		}
+		dbus_error_free(&error);
 	}
 #endif
 
