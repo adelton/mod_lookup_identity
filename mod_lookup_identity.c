@@ -86,7 +86,7 @@ static int lookup_identity_hook(request_rec * r) {
 		: srv_cfg && srv_cfg->output_groups ? srv_cfg->output_groups : LOOKUP_IDENTITY_OUTPUT_GROUPS;
 	the_config.output_groups_sep = cfg && cfg->output_groups_sep ? cfg->output_groups_sep
 		: srv_cfg && srv_cfg->output_groups_sep ? srv_cfg->output_groups_sep : LOOKUP_IDENTITY_OUTPUT_GROUPS_SEP;
-	
+
 	struct passwd * pwd = getpwnam(r->user);
 	if (! pwd) {
 		return DECLINED;
