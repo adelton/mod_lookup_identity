@@ -32,9 +32,10 @@
 #ifndef NO_USER_ATTR
 #include <dbus/dbus.h>
 #define DBUS_SSSD_PATH "/org/freedesktop/sssd/infopipe"
-#define DBUS_SSSD_GET_USER_ATTR_IFACE "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_IFACE "org.freedesktop.sssd.infopipe"
 #define DBUS_SSSD_GET_USER_ATTR_METHOD "GetUserAttr"
-#define DBUS_SSSD_GET_USER_ATTR_DEST "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_GET_GROUPS_METHOD "GetGroupList"
+#define DBUS_SSSD_DEST "org.freedesktop.sssd.infopipe"
 #define DBUS_SSSD_TIMEOUT 5000
 #endif
 
@@ -47,6 +48,7 @@ static const int LOOKUP_IDENTITY_OUTPUT_DEFAULT = 4;
 static char * LOOKUP_IDENTITY_OUTPUT_GECOS = "REMOTE_USER_GECOS";
 static char * LOOKUP_IDENTITY_OUTPUT_GROUPS = "REMOTE_USER_GROUPS";
 static char * LOOKUP_IDENTITY_OUTPUT_GROUPS_SEP = ":";
+static char * LOOKUP_IDENTITY_OUTPUT_ATTRS_SEP = ":";
 
 typedef struct lookup_identity_config {
 	char * context;
@@ -60,6 +62,244 @@ typedef struct lookup_identity_config {
 } lookup_identity_config;
 
 module AP_MODULE_DECLARE_DATA lookup_identity_module;
+
+static char * attr_array_concat(request_rec * r, const char *attr_sep, DBusMessageIter *array_parent) {
+        DBusMessageIter array_iter;
+        int len = 0;
+        char *buffer = NULL;
+        const char *attrvalue;
+
+        dbus_message_iter_recurse(array_parent, &array_iter);
+        do {
+                int type = dbus_message_iter_get_arg_type(&array_iter);
+                if (type != DBUS_TYPE_STRING) {
+                        continue;
+                }
+
+                if (len) {
+                        len += strlen(attr_sep);
+                }
+
+                dbus_message_iter_get_basic(&array_iter, &attrvalue);
+                len += strlen(attrvalue);
+        } while (dbus_message_iter_next(&array_iter));
+
+        if (len == 0) {
+                return NULL;
+        }
+
+        buffer = apr_palloc(r->pool, len + 1);
+        if (buffer == NULL) {
+                return NULL;
+        }
+        len = 0;
+
+        dbus_message_iter_recurse(array_parent, &array_iter);
+        do {
+                dbus_message_iter_get_basic(&array_iter, &attrvalue);
+
+                if (len) {
+                        strcpy(buffer + len, attr_sep);
+                        len += strlen(attr_sep);
+                }
+                strcpy(buffer + len, attrvalue);
+                len += strlen(attrvalue);
+        } while (dbus_message_iter_next(&array_iter));
+
+        buffer[len] = '\0';
+        return buffer;
+}
+
+static int parse_getattr_reply(request_rec * r,
+			    lookup_identity_config * the_config,
+			    DBusMessage * reply) {
+	DBusMessageIter iter;
+
+	dbus_message_iter_init(reply, &iter);
+
+	int type = dbus_message_iter_get_arg_type(&iter);
+	if (type != DBUS_TYPE_ARRAY) {
+                return DECLINED;
+	}
+
+	DBusMessageIter dict_iter;
+	dbus_message_iter_recurse(&iter, &dict_iter);
+
+        do {
+                DBusMessageIter item_iter;
+                DBusMessageIter value_iter;
+                char *attrname;
+                char *attrbuf;
+                void *hash_value;
+
+                type = dbus_message_iter_get_arg_type(&dict_iter);
+                if (type != DBUS_TYPE_DICT_ENTRY) {
+                        continue;
+                }
+
+                /* dicts are in fact tuples of two args - key and
+                 * value. Get the key first. That's just a string.
+                 */
+                dbus_message_iter_recurse(&dict_iter, &item_iter);
+                type = dbus_message_iter_get_arg_type(&item_iter);
+                if (type != DBUS_TYPE_STRING) {
+                        continue;
+                }
+                dbus_message_iter_get_basic(&item_iter, &attrname);
+
+                /* Is this a key we requested? */
+                hash_value = apr_hash_get(the_config->output_user_attr,
+                        attrname, APR_HASH_KEY_STRING);
+                if (hash_value == NULL) {
+                        continue;
+                }
+
+                /* Value must be a variant */
+                dbus_message_iter_next(&item_iter);
+                type = dbus_message_iter_get_arg_type(&item_iter);
+                if (type != DBUS_TYPE_VARIANT) {
+                        continue;
+                }
+
+                /* Inside the variant is an array of strings with
+                * values
+                */
+                dbus_message_iter_recurse(&item_iter, &value_iter);
+                type = dbus_message_iter_get_arg_type(&value_iter);
+                if (type != DBUS_TYPE_ARRAY) {
+                        continue;
+                }
+
+                attrbuf = attr_array_concat(r,
+				LOOKUP_IDENTITY_OUTPUT_ATTRS_SEP,
+				&value_iter);
+                if (attrbuf == NULL) {
+                        continue;
+                }
+
+                if (the_config->output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
+                        apr_table_set(r->notes, hash_value, attrbuf);
+                }
+                if (the_config->output & LOOKUP_IDENTITY_OUTPUT_ENV) {
+                        apr_table_set(r->subprocess_env, hash_value, attrbuf);
+                }
+        } while (dbus_message_iter_next(&dict_iter));
+
+	return OK;
+}
+
+static char *get_user_groups_ifp(request_rec * r, DBusConnection * connection,
+		const char *user, const char *group_sep) {
+	DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_DEST,
+			DBUS_SSSD_PATH,
+			DBUS_SSSD_IFACE,
+			DBUS_SSSD_GET_GROUPS_METHOD);
+
+	if (! message) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error allocating dbus message");
+		return NULL;
+	}
+	dbus_message_set_auto_start(message, TRUE);
+
+	dbus_bool_t dbret;
+	dbret = dbus_message_append_args(message,
+                DBUS_TYPE_STRING, &user,
+                DBUS_TYPE_INVALID);
+	if (! dbret) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			"Error appending user name %s to dbus message",
+			(const char *) user);
+		dbus_message_unref(message);
+		return NULL;
+	}
+
+	DBusError error;
+	dbus_error_init(&error);
+
+	DBusMessage * reply = dbus_connection_send_with_reply_and_block(connection,
+			message, DBUS_SSSD_TIMEOUT, &error);
+	dbus_message_unref(message);
+	if (dbus_error_is_set(&error)) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			"Error calling %s(%s): %s: %s",
+			DBUS_SSSD_GET_GROUPS_METHOD, user,
+			error.name, error.message);
+		dbus_error_free(&error);
+		return NULL;
+	}
+
+	/* Reply must be a list */
+	int reply_type = dbus_message_get_type(reply);
+	if (reply_type != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			"Wrong reply type %d from %s(%s)",
+			reply_type, DBUS_SSSD_GET_GROUPS_METHOD, user);
+		dbus_message_unref(reply);
+		return NULL;
+	}
+
+	DBusMessageIter iter;
+	dbus_message_iter_init(reply, &iter);
+	int type = dbus_message_iter_get_arg_type(&iter);
+	if (type != DBUS_TYPE_ARRAY) {
+		dbus_message_unref(reply);
+                return NULL;
+	}
+
+	char *grouplist;
+	grouplist = attr_array_concat(r, group_sep, &iter);
+	dbus_message_unref(reply);
+
+	return grouplist;
+}
+
+#ifdef NO_USER_ATTR
+static char *get_user_groups_initgr(request_rec * r, struct passwd *pwd,
+		const char *group_sep) {
+	int ngroups = 3;
+	gid_t * groups;
+	groups = malloc(sizeof(gid_t) * ngroups);
+	if (! groups) {
+		return NULL;
+	}
+	while (getgrouplist(pwd->pw_name, pwd->pw_gid, groups, &ngroups) == -1) {
+		free(groups);
+		groups = malloc(sizeof(gid_t) * ngroups);
+		if (! groups) {
+			return NULL;
+		}
+	}
+	int i, len;
+	len = 0;
+	struct group * gr;
+	char *buffer = NULL;
+	for (i = 0; i < ngroups; i++) {
+		if (len)
+			len += strlen(group_sep);
+		gr = getgrgid(groups[i]);
+		if (gr)
+			len += strlen(gr->gr_name);
+	}
+	if (len) {
+		buffer = apr_palloc(r->pool, len + 1);
+		len = 0;
+		for (i = 0; i < ngroups; i++) {
+			gr = getgrgid(groups[i]);
+			if (gr) {
+				if (len) {
+					strcpy(buffer + len, group_sep);
+					len += strlen(group_sep);
+				}
+				strcpy(buffer + len, gr->gr_name);
+				len += strlen(gr->gr_name);
+			}
+		}
+		buffer[len] = '\0';
+	}
+	free(groups);
+	return buffer;
+}
+#endif
 
 static int lookup_identity_hook(request_rec * r) {
 	lookup_identity_config * cfg = (lookup_identity_config *) ap_get_module_config(r->per_dir_config, &lookup_identity_module);
@@ -91,52 +331,29 @@ static int lookup_identity_hook(request_rec * r) {
 	if (! pwd) {
 		return DECLINED;
 	}
-	int ngroups = 3;
-	gid_t * groups;
-	groups = malloc(sizeof(gid_t) * ngroups);
-	if (! groups) {
-		return DECLINED;
+
+	char *buf_groups = NULL;
+#ifndef NO_USER_ATTR
+	DBusError error;
+	dbus_error_init(&error);
+	DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
+	if (! connection) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			"Error connecting to system dbus: %s", error.message);
+	} else {
+		buf_groups = get_user_groups_ifp(r, connection, r->user,
+				the_config.output_groups_sep);
 	}
-	while (getgrouplist(r->user, pwd->pw_gid, groups, &ngroups) == -1) {
-		free(groups);
-		groups = malloc(sizeof(gid_t) * ngroups);
-		if (! groups) {
-			return DECLINED;
-		}
+#else
+	buf_groups = get_user_groups_initgr(r, pwd,
+			the_config.output_groups_sep);
+#endif
+	if (buf_groups && the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
+		apr_table_setn(r->notes, the_config.output_groups, buf_groups);
 	}
-	int i, len;
-	len = 0;
-	struct group * gr;
-	for (i = 0; i < ngroups; i++) {
-		if (len)
-			len += strlen(the_config.output_groups_sep);
-		gr = getgrgid(groups[i]);
-		if (gr)
-			len += strlen(gr->gr_name);
+	if (buf_groups && the_config.output & LOOKUP_IDENTITY_OUTPUT_ENV) {
+		apr_table_setn(r->subprocess_env, the_config.output_groups, buf_groups);
 	}
-	if (len) {
-		char * buffer = apr_palloc(r->pool, len + 1);
-		len = 0;
-		for (i = 0; i < ngroups; i++) {
-			gr = getgrgid(groups[i]);
-			if (gr) {
-				if (len) {
-					strcpy(buffer + len, the_config.output_groups_sep);
-					len += strlen(the_config.output_groups_sep);
-				}
-				strcpy(buffer + len, gr->gr_name);
-				len += strlen(gr->gr_name);
-			}
-		}
-		buffer[len] = '\0';
-		if (the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
-			apr_table_setn(r->notes, the_config.output_groups, buffer);
-		}
-		if (the_config.output & LOOKUP_IDENTITY_OUTPUT_ENV) {
-			apr_table_setn(r->subprocess_env, the_config.output_groups, buffer);
-		}
-	}
-	free(groups);
 
 	if (the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
 		apr_table_set(r->notes, the_config.output_gecos, pwd->pw_gecos);
@@ -159,85 +376,103 @@ static int lookup_identity_hook(request_rec * r) {
 	}
 
 	if (the_config.output_user_attr) {
-		DBusError error;
-		dbus_error_init(&error);
-		DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
 		if (! connection) {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
 				"Error connecting to system dbus: %s", error.message);
 		} else {
 			dbus_connection_set_exit_on_disconnect(connection, FALSE);
 			const char * x_user = r->user;
-			apr_hash_index_t * hi = apr_hash_first(r->pool, the_config.output_user_attr);
-			while (hi) {
-				const void * key;
-				void * value;
-				apr_hash_this(hi, &key, NULL, &value);
-				hi = apr_hash_next(hi);
 
-				DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_GET_USER_ATTR_DEST,
-					DBUS_SSSD_PATH,
-					DBUS_SSSD_GET_USER_ATTR_IFACE,
-					DBUS_SSSD_GET_USER_ATTR_METHOD);
-				if (! message) {
-					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error allocating dbus message");
-					continue;
-				}
-				dbus_message_set_auto_start(message, TRUE);
+                        DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_DEST,
+                                DBUS_SSSD_PATH,
+                                DBUS_SSSD_IFACE,
+                                DBUS_SSSD_GET_USER_ATTR_METHOD);
+                        if (! message) {
+                                ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error allocating dbus message");
+                                return DECLINED;
+                        }
+                        dbus_message_set_auto_start(message, TRUE);
 
-				DBusMessageIter iter;
-				dbus_message_iter_init_append(message, &iter);
-				dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &x_user);
-				dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &key);
+                        dbus_bool_t dbret;
+                        DBusMessageIter iter;
+                        DBusMessageIter attr_array;
+                        dbus_message_iter_init_append(message, &iter);
+                        dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &x_user);
 
-				DBusMessage * reply = dbus_connection_send_with_reply_and_block(connection,
-					message, DBUS_SSSD_TIMEOUT, &error);
-				dbus_message_unref(message);
-				if (dbus_error_is_set(&error)) {
-					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-						"Error calling %s(%s, %s): %s: %s",
-						DBUS_SSSD_GET_USER_ATTR_METHOD, x_user, (char *)key,
-						error.name, error.message);
-					dbus_error_free(&error);
-					continue;
-				}
-				/* reply populated */
-				int reply_type = dbus_message_get_type(reply);
-				if (reply_type == DBUS_MESSAGE_TYPE_ERROR) {
-					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-						"Error %s calling %s(%s, %s)",
-						dbus_message_get_error_name(reply),
-						DBUS_SSSD_GET_USER_ATTR_METHOD, x_user, (char *)key);
-					dbus_message_unref(reply);
-					continue;
-				}
-				if (reply_type != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
-					ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-						"Unexpected reply type %d calling %s(%s, %s)", reply_type,
-						DBUS_SSSD_GET_USER_ATTR_METHOD, x_user, (char *)key);
-					dbus_message_unref(reply);
-					continue;
-				}
-				/* reply_type == DBUS_MESSAGE_TYPE_METHOD_RETURN */
-				dbus_message_iter_init(reply, &iter);
-				int type = dbus_message_iter_get_arg_type(&iter);
-				char * r_value;
-				if (type == DBUS_TYPE_ARRAY) {
-					DBusMessageIter subiter;
-					dbus_message_iter_recurse(&iter, &subiter);
-					type = dbus_message_iter_get_arg_type(&subiter);
-					if (type == DBUS_TYPE_STRING) {
-						dbus_message_iter_get_basic(&subiter, &r_value);
-						if (the_config.output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
-							apr_table_set(r->notes, value, r_value);
-						}
-						if (the_config.output & LOOKUP_IDENTITY_OUTPUT_ENV) {
-							apr_table_set(r->subprocess_env, value, r_value);
-						}
-					}
-				}
-				dbus_message_unref(reply);
-			}
+                        dbret = dbus_message_iter_open_container(&iter,
+                                DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING,
+                                &attr_array);
+                        if (! dbret) {
+                            ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                        "Could not open DBus container\n");
+                            dbus_message_unref(message);
+                            return DECLINED;
+                        }
+
+                        apr_hash_index_t * hi = apr_hash_first(r->pool, the_config.output_user_attr);
+                        while (hi) {
+                            const void * key;
+                            void * value;
+
+                            apr_hash_this(hi, &key, NULL, &value);
+                            hi = apr_hash_next(hi);
+
+                            dbret = dbus_message_iter_append_basic(&attr_array, DBUS_TYPE_STRING, &key);
+                            if (! dbret) {
+                                ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                            "Error appending key %s to dbus message",
+                                            (const char *) key);
+                                continue;
+                            }
+                        }
+
+                        dbus_message_iter_close_container(&iter, &attr_array);
+                        if (! dbret) {
+                            ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                        "Could not close DBus container\n");
+                            dbus_message_unref(message);
+                            return DECLINED;
+                        }
+
+                        DBusMessage * reply = dbus_connection_send_with_reply_and_block(connection,
+                                message, DBUS_SSSD_TIMEOUT, &error);
+                        dbus_message_unref(message);
+                        if (dbus_error_is_set(&error)) {
+                                ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                        "Error calling %s(%s): %s: %s",
+                                        DBUS_SSSD_GET_USER_ATTR_METHOD, x_user,
+                                        error.name, error.message);
+                                dbus_error_free(&error);
+                                return DECLINED;
+                        }
+
+                        /* reply populated */
+                        int reply_type = dbus_message_get_type(reply);
+
+                        if (reply_type == DBUS_MESSAGE_TYPE_ERROR) {
+                                ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                        "Error %s calling %s(%s)",
+                                        dbus_message_get_error_name(reply),
+                                        DBUS_SSSD_GET_USER_ATTR_METHOD, x_user);
+                                dbus_message_unref(reply);
+                                return DECLINED;
+                        }
+                        if (reply_type != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
+                                ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                        "Unexpected reply type %d calling %s(%s)", reply_type,
+                                        DBUS_SSSD_GET_USER_ATTR_METHOD, x_user);
+                                dbus_message_unref(reply);
+                                return DECLINED;
+                        }
+
+                        int ret = parse_getattr_reply(r, &the_config, reply);
+                        dbus_message_unref(reply);
+                        if (ret != OK) {
+                                ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+                                        "Malformed reply in response to calling %s(%s)",
+                                        DBUS_SSSD_GET_USER_ATTR_METHOD, x_user);
+                                return DECLINED;
+                        }
 			dbus_connection_unref(connection);
 		}
 		dbus_error_free(&error);
