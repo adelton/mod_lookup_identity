@@ -32,10 +32,10 @@
 #ifndef NO_USER_ATTR
 #include <dbus/dbus.h>
 #define DBUS_SSSD_PATH "/org/freedesktop/sssd/infopipe"
-#define DBUS_SSSD_GET_USER_ATTR_IFACE "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_IFACE "org.freedesktop.sssd.infopipe"
 #define DBUS_SSSD_GET_USER_ATTR_METHOD "GetUserAttr"
 #define DBUS_SSSD_GET_GROUPS_METHOD "GetGroupList"
-#define DBUS_SSSD_GET_USER_ATTR_DEST "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_DEST "org.freedesktop.sssd.infopipe"
 #define DBUS_SSSD_TIMEOUT 5000
 #endif
 
@@ -190,9 +190,9 @@ static int parse_getattr_reply(request_rec * r,
 
 static char *get_user_groups_ifp(request_rec * r, DBusConnection * connection,
 		const char *user, const char *group_sep) {
-	DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_GET_USER_ATTR_DEST,
+	DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_DEST,
 			DBUS_SSSD_PATH,
-			DBUS_SSSD_GET_USER_ATTR_IFACE,
+			DBUS_SSSD_IFACE,
 			DBUS_SSSD_GET_GROUPS_METHOD);
 
 	if (! message) {
@@ -383,9 +383,9 @@ static int lookup_identity_hook(request_rec * r) {
 			dbus_connection_set_exit_on_disconnect(connection, FALSE);
 			const char * x_user = r->user;
 
-                        DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_GET_USER_ATTR_DEST,
+                        DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_DEST,
                                 DBUS_SSSD_PATH,
-                                DBUS_SSSD_GET_USER_ATTR_IFACE,
+                                DBUS_SSSD_IFACE,
                                 DBUS_SSSD_GET_USER_ATTR_METHOD);
                         if (! message) {
                                 ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error allocating dbus message");
