@@ -62,7 +62,7 @@ When building from sources, command
 should build and install the module.
 
 If the available version of sssd does not provide or is not configured
-to provide the itp dbus service, compile with
+to provide the ifp dbus service, compile with
 
     apxs -DNO_USER_ATTR -i -a -c mod_lookup_identity.c -Wall -pedantic
 
