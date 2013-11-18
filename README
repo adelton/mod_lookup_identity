@@ -77,7 +77,7 @@ The default behaviour can be changed with the following directives:
 	will set value of REMOTE_USER_GROUPS to staff:student. If the
 	option is
 
-	    LookupOutputGroups REMOTE_USER_GROUPS :
+	    LookupOutputGroups REMOTE_USER_GROUPS
 
 	the value will be either staff or student, depending on the
 	order returned by the sssd dbus call (order not to be relied
@@ -95,7 +95,7 @@ The default behaviour can be changed with the following directives:
 	the values.
 
 	Example: if user alice is member of groups staff and student,
-	optio
+	option
 
 	    LookupOutputGroupsIter REMOTE_USER_GROUPS
 
