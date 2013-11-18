@@ -5,51 +5,183 @@ Apache module mod_lookup_identity
 Apache module to retrieve additional information about the
 authenticated user.
 
-It retrieves the GECOS information using the getpwnam call and store
+It retrieves the GECOS information using the getpwnam call and stores
 it in a note/environment variable (by default REMOTE_USER_GECOS).
-It gets list of group names the user belongs using getgrouplist and
-getgrgid calls and stores it in a note/environment variable (by
-default REMOTE_USER_GROUPS, colon separated). It can get any attribute
-configured in /etc/sssd/sssd.conf's domain section by the
-ldap_user_extra_attrs option and store it to any custom environment
-variable or note.
+It allows to get list of group names the user belongs using sssd dbus
+org.freedesktop.sssd.infopipe.GetUserGroups call and any custom
+attribute configured in /etc/sssd/sssd.conf using sssd dbus
+org.freedesktop.sssd.infopipe.GetUserAttr call.
 
-The module needs to be loaded into Apache's configuration file like
-/etc/httpd/conf/httpd.conf with directive like
+The sssd-dbus package needs to be installed and the ifp service
+enabled in the [sssd] section of /etc/sssd/sssd.conf. Caching of
+non-POSIX attributes need to be enabled in the [domain/*] section of
+/etc/sssd/sssd.conf, configuration ldap_user_extra_attrs, and they
+also need to be enabled in the [ifp] section using the user_attributes
+configuration option.
+
+Example of sssd.conf:
+
+    [domain/example.com]
+    ...
+    ldap_user_extra_attrs = mail, telephoneNumber, givenname, sn
+
+    [sssd]
+    services = nss, pam, ssh, ifp
+
+    [ifp]
+    allowed_uids = 48, 0
+    user_attributes = +mail, +telephoneNumber, +givenname, +sn
+
+The module itself needs to be loaded into Apache's configuration file
+like /etc/httpd/conf/httpd.conf with directive like
 
     LoadModule lookup_identity_module modules/mod_lookup_identity.so
 
 The default behaviour can be changed with the following directives:
 
     LookupOutput where_to_store_results
-	
+
 	Specifies if the lookups will be done at all and where the results
 	of the lookup will be stored. Possible values are:
 
 	    None: Disable the lookup altogether
 	    Notes: Sets the Apache notes table only
 	    Env: Sets environment variables only
-	    All: Sets both (the default) 
+	    All: Sets both (the default)
 
-    LookupOutputGECOS name_of_the_note/environment_variable_for_the_GECOS_result
+    LookupOutputGECOS name
 
-	Default is REMOTE_USER_GECOS
+	Name of the note and/or environment variable for the GECOS
+	value.
 
-    LookupOutputGroups name_of_the_note/environment_variable_for_the_group_list
+	Example: LookupOutputGECOS REMOTE_USER_FULLNAME
 
-	Default is REMOTE_USER_GROUPS
+	Default is REMOTE_USER_GECOS.
 
-    LookupOutputGroupsSeparator the_separator
+    LookupOutputGroups name [separator]
 
-	Default is single colon
+	Name of the note and/or environment variable for the list of groups
+	retrieved using the org.freedesktop.sssd.infopipe.GetUserGroups
+	call, and optionally separator for multiple groups.
 
-    LookupUserAttr the_attribute name_of_the_note/environment_variable
+	If the separator is specified, it is used to concatenate
+	multiple groups in single string value of the
+	note/environment variable. If the separator is not specified,
+	only one group is set.
 
-	By default no user attributes are retrieved.
+	Example: if user alice is member of groups staff and student,
+	option
 
-Of course, if sssd is configured on the machine, it will do the
-lookup for us but the standard Unix calls are the interface for us at
-this point.
+	    LookupOutputGroups REMOTE_USER_GROUPS :
+
+	will set value of REMOTE_USER_GROUPS to staff:student. If the
+	option is
+
+	    LookupOutputGroups REMOTE_USER_GROUPS :
+
+	the value will be either staff or student, depending on the
+	order returned by the sssd dbus call (order not to be relied
+	on).
+
+	By default, groups are not retrieved.
+
+    LookupOutputGroupsIter name
+
+	The number of groups the user is a member of (as returned by
+	the org.freedesktop.sssd.infopipe.GetUserGroups call) will be
+	stored in note/environment variable <name>_N and individual
+	values in <name>_1 .. <name>_<<name>_N>. This allows for
+	safe retrieval of groups without the separator clashing with
+	the values.
+
+	Example: if user alice is member of groups staff and student,
+	optio
+
+	    LookupOutputGroupsIter REMOTE_USER_GROUPS
+
+	will set
+
+	    REMOTE_USER_GROUPS_N=2
+	    REMOTE_USER_GROUPS_1=staff
+	    REMOTE_USER_GROUPS_2=student
+
+	(or the values of REMOTE_USER_GROUPS_1 and REMOTE_USER_GROUPS_2
+	will be flipped).
+
+	If user is not a member of any group, the <name>_N value will
+	be set to 0.
+
+	By default, groups are not retrieved.
+
+    LookupUserAttr the_attribute name [separator]
+
+	Name of the attribute to be retrieved using the
+	org.freedesktop.sssd.infopipe.GetUserAttr call and name of
+	the note and/or environment variable where the value will
+	be stored, and optionally separator for multivalued results.
+
+	If the separator is specified, it is used to concatenate
+	multiple values in single string value of the
+	note/environment variable. If the separator is not specified,
+	only one value is set.
+
+	Example: LookupUserAttr mail REMOTE_USER_MAIL will retrieve
+	one value from the mail attribute (from potentially
+	multivalued attribute) and store them to note/environment
+	variable REMOTE_USER_MAIL.
+
+	LookupUserAttr mail REMOTE_USER_MAIL ", " will retrieve all
+	the values and store them as coma-separated string.
+
+	Multiple LookupUserAttr lines can be used to retrieve multiple
+	attributes.
+
+	By default, no user attributes are retrieved.
+
+    LookupUserAttrIter the_attribute name
+
+	The number of attribute values for the user (as returned by
+	the org.freedesktop.sssd.infopipe.GetUserAttr call) will be
+	stored in note/environment variable <name>_N and individual
+	values in <name>_1 .. <name>_<<name>_N>. This allows for
+	safe retrieval of multivalued attributes without the
+	separator clashing with the values.
+
+	Example: if user alice has multivalued custom attribute
+	office_no with values M314 and P005,
+
+	    LookupUserAttrIter office_no REMOTE_USER_OFFICE
+
+	will cause the following notes/environment variables to be
+	set:
+
+	    REMOTE_USER_OFFICE_N=2
+	    REMOTE_USER_OFFICE_1=M314
+	    REMOTE_USER_OFFICE_2=P005
+
+	Multiple LookupUserAttr lines can be used to retrieve multiple
+	attributes.
+
+	By default, no user attributes are retrieved.
+
+    LookupDbusTimeout miliseconds
+
+	Default: 5000 (== 5 s).
+
+Please note that LookupUserGroups and LookupUserGroupsIter, as well as
+LookupUserAttr and LookupUserAttrIter for single attribute can be
+configured with the same note/environment variable name. For example,
+
+    LookupOutputGroups REMOTE_USER_GROUPS :
+    LookupOutputGroupsIter REMOTE_USER_GROUPS
+
+can be set at the same time and for user with two groups, all the
+following values will be set:
+
+    REMOTE_USER_GROUPS=staff:student
+    REMOTE_USER_GROUPS_N=2
+    REMOTE_USER_GROUPS_1=staff
+    REMOTE_USER_GROUPS_2=student
 
 Building from sources
 ---------------------
