@@ -6,7 +6,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user.
 Name: mod_lookup_identity
-Version: 0.6
+Version: 0.7
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -58,6 +58,10 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 %{_httpd_moddir}/*.so
 
 %changelog
+* Tue Nov 19 2013 Jan Pazdziora - 0.7-1
+- Define lookup_identity_hook as optional function, callable from
+  other modules.
+
 * Mon Nov 18 2013 Jan Pazdziora - 0.6-1
 - Use org.freedesktop.sssd.infopipe.GetUserGroups for group lists.
 - Support new org.freedesktop.sssd.infopipe.GetUserAttr parameters /
