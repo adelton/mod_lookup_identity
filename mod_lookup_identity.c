@@ -20,6 +20,7 @@
 #include "ap_config.h"
 #include "ap_provider.h"
 #include "apr_strings.h"
+#include "apr_optional.h"
 #include "httpd.h"
 #include "http_core.h"
 #include "http_config.h"
@@ -380,6 +381,8 @@ static int lookup_identity_hook(request_rec * r) {
 	return OK;
 }
 
+APR_DECLARE_OPTIONAL_FN(int, lookup_identity_hook, (request_rec * r));
+
 const char * set_output(cmd_parms * cmd, void * conf_void, const char * arg) {
 	lookup_identity_config * cfg = (lookup_identity_config *) conf_void;
 	if (cfg) {
@@ -527,6 +530,7 @@ static const command_rec directives[] = {
 
 static void register_hooks(apr_pool_t * pool) {
 	ap_hook_fixups(lookup_identity_hook, NULL, NULL, APR_HOOK_LAST);
+	APR_REGISTER_OPTIONAL_FN(lookup_identity_hook);
 }
 
 module AP_MODULE_DECLARE_DATA lookup_identity_module = {
