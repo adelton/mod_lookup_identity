@@ -140,13 +140,13 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 		}
 		if (dbus_error_is_set(error)) {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-				"Error calling %s(%s%s): %s: %s", method, user, args_string, error->name, error->message);
+				"Error dbus calling %s(%s%s): %s: %s", method, user, args_string, error->name, error->message);
 		} else if (reply_type == DBUS_MESSAGE_TYPE_ERROR) {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-				"Error %s calling %s(%s%s)", dbus_message_get_error_name(reply), method, user, args_string);
+				"Error %s dbus calling %s(%s%s)", dbus_message_get_error_name(reply), method, user, args_string);
 		} else {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-				"Error unexpected reply type %d calling %s(%s%s)", reply_type, method, user, args_string);
+				"Error unexpected reply type %d dbus calling %s(%s%s)", reply_type, method, user, args_string);
 		}
 		if (reply) {
 			dbus_message_unref(reply);
@@ -199,6 +199,8 @@ static int lookup_identity_hook(request_rec * r) {
 		return DECLINED;
 	}
 
+	ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server, "invoked for user %s", r->user);
+
 	struct passwd * pwd = getpwnam(r->user);
 	if (! pwd) {
 		return DECLINED;
@@ -232,6 +234,8 @@ static int lookup_identity_hook(request_rec * r) {
 					char * groups = "";
 					int i;
 					for (i = 0; i < num; i++) {
+						ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server,
+							"dbus call %s returned group %s", DBUS_SSSD_GET_USER_GROUPS_METHOD, ptr[i]);
 						if (the_config->output_groups) {
 							if (i == 0) {
 								groups = apr_pstrdup(r->pool, ptr[i]);
@@ -276,7 +280,7 @@ static int lookup_identity_hook(request_rec * r) {
 							type = dbus_message_iter_get_arg_type(&iter);
 							if (type != DBUS_TYPE_DICT_ENTRY) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-									"Call %s returned value %d instead of DBUS_TYPE_DICT_ENTRY",
+									"dbus call %s returned value %d instead of DBUS_TYPE_DICT_ENTRY",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, type);
 								continue;
 							}
@@ -287,19 +291,19 @@ static int lookup_identity_hook(request_rec * r) {
 							char * out_name = apr_hash_get(the_config->output_user_attr, attr_name, APR_HASH_KEY_STRING);
 							if (!out_name) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-									"Call %s returned key %s that we did not ask for",
+									"dbus call %s returned key %s that we did not ask for",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
 							}
 							apr_hash_set(seen, out_name, APR_HASH_KEY_STRING, "");
 							if (! dbus_message_iter_next(&dictiter)) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-									"Call %s returned key %s with no value", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
+									"dbus call %s returned key %s with no value", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 							}
 							type = dbus_message_iter_get_arg_type(&dictiter);
 							if (type != DBUS_TYPE_VARIANT) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-									"Call %s returned key %s which does not have DBUS_TYPE_VARIANT as value",
+									"dbus call %s returned key %s which does not have DBUS_TYPE_VARIANT as value",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
 							}
@@ -307,7 +311,7 @@ static int lookup_identity_hook(request_rec * r) {
 							type = dbus_message_iter_get_arg_type(&dictiter);
 							if (type != DBUS_TYPE_ARRAY) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-									"Call %s returned key %s which does not have DBUS_TYPE_VARIANT DBUS_TYPE_ARRAY as value",
+									"dbus call %s returned key %s which does not have DBUS_TYPE_VARIANT DBUS_TYPE_ARRAY as value",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
 							}
@@ -323,8 +327,8 @@ static int lookup_identity_hook(request_rec * r) {
 							do {
 								char * r_data;
 								dbus_message_iter_get_basic(&dictiter, &r_data);
-								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-									"Got dict entry string %s=%s", attr_name, r_data);
+								ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server,
+									"dbus call %s returned attr %s=%s", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name, r_data);
 								if (out_name && strlen(out_name)) {
 									if (i == 0) {
 										out_value = apr_pstrdup(r->pool, r_data);
