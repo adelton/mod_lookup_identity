@@ -296,7 +296,9 @@ static int lookup_identity_hook(request_rec * r) {
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
 							}
-							apr_hash_set(seen, out_name, APR_HASH_KEY_STRING, "");
+							if (seen) {
+								apr_hash_set(seen, out_name, APR_HASH_KEY_STRING, "");
+							}
 							if (! dbus_message_iter_next(&dictiter)) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
 									"dbus call %s returned key %s with no value", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
