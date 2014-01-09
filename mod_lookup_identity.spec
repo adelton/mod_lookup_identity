@@ -6,7 +6,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user.
 Name: mod_lookup_identity
-Version: 0.7.1
+Version: 0.8
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -58,6 +58,9 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 %{_httpd_moddir}/*.so
 
 %changelog
+* Thu Jan 09 2014 Jan Pazdziora - 0.8-1
+- Declare all functions static for proper isolation.
+
 * Thu Nov 21 2013 Jan Pazdziora - 0.7.1-1
 - Address segfault when no LookupUserAttrIter is set.
 

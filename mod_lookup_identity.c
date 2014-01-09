@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2013 Jan Pazdziora
+ * Copyright 2013--2014 Jan Pazdziora
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -167,8 +167,8 @@ static void lookup_identity_output_data(request_rec * r, int the_output, char * 
 	}
 }
 
-void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_void);
-lookup_identity_config * create_common_conf(apr_pool_t * pool);
+static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_void);
+static lookup_identity_config * create_common_conf(apr_pool_t * pool);
 
 static int lookup_identity_hook(request_rec * r) {
 	lookup_identity_config * cfg = (lookup_identity_config *) ap_get_module_config(r->per_dir_config, &lookup_identity_module);
@@ -385,7 +385,7 @@ static int lookup_identity_hook(request_rec * r) {
 
 APR_DECLARE_OPTIONAL_FN(int, lookup_identity_hook, (request_rec * r));
 
-const char * set_output(cmd_parms * cmd, void * conf_void, const char * arg) {
+static const char * set_output(cmd_parms * cmd, void * conf_void, const char * arg) {
 	lookup_identity_config * cfg = (lookup_identity_config *) conf_void;
 	if (cfg) {
 		if (!strcasecmp(arg, "none")) {
@@ -402,7 +402,7 @@ const char * set_output(cmd_parms * cmd, void * conf_void, const char * arg) {
 }
 
 #ifndef NO_USER_ATTR
-const char * set_output_groups(cmd_parms * cmd, void * conf_void, const char * arg, const char * sep) {
+static const char * set_output_groups(cmd_parms * cmd, void * conf_void, const char * arg, const char * sep) {
 	lookup_identity_config * cfg = (lookup_identity_config *) conf_void;
 	if (cfg) {
 		cfg->output_groups = apr_pstrdup(cmd->pool, arg);
@@ -413,7 +413,7 @@ const char * set_output_groups(cmd_parms * cmd, void * conf_void, const char * a
 	return NULL;
 }
 
-const char * set_user_attr(cmd_parms * cmd, void * conf_void, const char * attrib, const char * output, const char * sep) {
+static const char * set_user_attr(cmd_parms * cmd, void * conf_void, const char * attrib, const char * output, const char * sep) {
 	lookup_identity_config * cfg = (lookup_identity_config *) conf_void;
 	if (cfg) {
 		if (!cfg->output_user_attr) {
@@ -431,7 +431,7 @@ const char * set_user_attr(cmd_parms * cmd, void * conf_void, const char * attri
 	return NULL;
 }
 
-const char * set_user_attr_iter(cmd_parms * cmd, void * conf_void, const char * attrib, const char * output) {
+static const char * set_user_attr_iter(cmd_parms * cmd, void * conf_void, const char * attrib, const char * output) {
 	lookup_identity_config * cfg = (lookup_identity_config *) conf_void;
 	if (cfg) {
 		if (!cfg->output_user_attr_iter) {
@@ -450,7 +450,7 @@ const char * set_user_attr_iter(cmd_parms * cmd, void * conf_void, const char * 
 }
 #endif
 
-lookup_identity_config * create_common_conf(apr_pool_t * pool) {
+static lookup_identity_config * create_common_conf(apr_pool_t * pool) {
 	lookup_identity_config * cfg = apr_pcalloc(pool, sizeof(lookup_identity_config));
 	if (cfg) {
 		cfg->output = LOOKUP_IDENTITY_OUTPUT_DEFAULT;
@@ -459,14 +459,14 @@ lookup_identity_config * create_common_conf(apr_pool_t * pool) {
 	return cfg;
 }
 
-void * create_server_conf(apr_pool_t * pool, server_rec * s) {
+static void * create_server_conf(apr_pool_t * pool, server_rec * s) {
 	lookup_identity_config * cfg = create_common_conf(pool);
 	if (cfg)
 		cfg->context = apr_psprintf(pool, "(server %s)", s->server_hostname);
 	return cfg;
 }
 
-void * create_dir_conf(apr_pool_t * pool, char * context) {
+static void * create_dir_conf(apr_pool_t * pool, char * context) {
 	lookup_identity_config * cfg = create_common_conf(pool);
 	if (cfg) {
 		context = context ? context : "(no directory context)";
@@ -475,7 +475,7 @@ void * create_dir_conf(apr_pool_t * pool, char * context) {
 	return cfg;
 }
 
-void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_void) {
+static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_void) {
 	lookup_identity_config * base = (lookup_identity_config *) base_void;
 	lookup_identity_config * add = (lookup_identity_config *) add_void;
 	lookup_identity_config * cfg = (lookup_identity_config *) create_dir_conf(pool, add->context);
