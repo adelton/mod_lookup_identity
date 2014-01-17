@@ -29,7 +29,7 @@ Example of sssd.conf:
     services = nss, pam, ssh, ifp
 
     [ifp]
-    allowed_uids = 48, 0
+    allowed_uids = apache, root
     user_attributes = +mail, +telephoneNumber, +givenname, +sn
 
 The module itself needs to be loaded into Apache's configuration file
