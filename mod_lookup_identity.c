@@ -531,7 +531,8 @@ static const command_rec directives[] = {
 };
 
 static void register_hooks(apr_pool_t * pool) {
-	ap_hook_fixups(lookup_identity_hook, NULL, NULL, APR_HOOK_LAST);
+	static const char * const aszSucc[] = {"mod_headers.c", NULL};
+	ap_hook_fixups(lookup_identity_hook, NULL, aszSucc, APR_HOOK_LAST);
 	APR_REGISTER_OPTIONAL_FN(lookup_identity_hook);
 }
 
