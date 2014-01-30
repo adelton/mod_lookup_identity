@@ -34,7 +34,7 @@ Use of REMOTE_USER_* environment variables is recommended.
 %setup -q -n %{name}-%{version}
 
 %build
-%{_httpd_apxs} -c $(pkg-config --cflags dbus-1) mod_lookup_identity.c $(pkg-config --libs dbus-1) -Wall -pedantic
+%{_httpd_apxs} -c -Wc,"%{optflags} -Wall -pedantic $(pkg-config --cflags dbus-1)" $(pkg-config --libs dbus-1) mod_lookup_identity.c
 
 %install
 rm -rf $RPM_BUILD_ROOT
