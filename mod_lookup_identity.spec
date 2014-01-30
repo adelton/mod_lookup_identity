@@ -25,9 +25,8 @@ Requires: dbus-libs
 %{?filter_setup}
 
 %description
-mod_lookup_identity can retrieve GECOS and group information about
-user authenticated in Apache httpd server, as well as attributes
-about the user provided by local sssd, and store these values
+mod_lookup_identity can retrieve additional pieces of information
+about user authenticated in Apache httpd server and store these values
 in notes/environment variables to be consumed by web applications.
 Use of REMOTE_USER_* environment variables is recommended.
 
