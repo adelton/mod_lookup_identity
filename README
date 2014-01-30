@@ -49,16 +49,16 @@ The default behaviour can be changed with the following directives:
 	    Env: Sets environment variables only
 	    All: Sets both (the default)
 
-    LookupOutputGECOS name
+    LookupUserGECOS name
 
 	Name of the note and/or environment variable for the GECOS
 	value.
 
-	Example: LookupOutputGECOS REMOTE_USER_FULLNAME
+	Example: LookupUserGECOS REMOTE_USER_FULLNAME
 
 	Default is REMOTE_USER_GECOS.
 
-    LookupOutputGroups name [separator]
+    LookupUserGroups name [separator]
 
 	Name of the note and/or environment variable for the list of groups
 	retrieved using the org.freedesktop.sssd.infopipe.GetUserGroups
@@ -72,12 +72,12 @@ The default behaviour can be changed with the following directives:
 	Example: if user alice is member of groups staff and student,
 	option
 
-	    LookupOutputGroups REMOTE_USER_GROUPS :
+	    LookupUserGroups REMOTE_USER_GROUPS :
 
 	will set value of REMOTE_USER_GROUPS to staff:student. If the
 	option is
 
-	    LookupOutputGroups REMOTE_USER_GROUPS
+	    LookupUserGroups REMOTE_USER_GROUPS
 
 	the value will be either staff or student, depending on the
 	order returned by the sssd dbus call (order not to be relied
@@ -85,7 +85,7 @@ The default behaviour can be changed with the following directives:
 
 	By default, groups are not retrieved.
 
-    LookupOutputGroupsIter name
+    LookupUserGroupsIter name
 
 	The number of groups the user is a member of (as returned by
 	the org.freedesktop.sssd.infopipe.GetUserGroups call) will be
@@ -97,7 +97,7 @@ The default behaviour can be changed with the following directives:
 	Example: if user alice is member of groups staff and student,
 	option
 
-	    LookupOutputGroupsIter REMOTE_USER_GROUPS
+	    LookupUserGroupsIter REMOTE_USER_GROUPS
 
 	will set
 
@@ -172,8 +172,8 @@ Please note that LookupUserGroups and LookupUserGroupsIter, as well as
 LookupUserAttr and LookupUserAttrIter for single attribute can be
 configured with the same note/environment variable name. For example,
 
-    LookupOutputGroups REMOTE_USER_GROUPS :
-    LookupOutputGroupsIter REMOTE_USER_GROUPS
+    LookupUserGroups REMOTE_USER_GROUPS :
+    LookupUserGroupsIter REMOTE_USER_GROUPS
 
 can be set at the same time and for user with two groups, all the
 following values will be set:
