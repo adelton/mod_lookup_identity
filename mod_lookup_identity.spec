@@ -52,7 +52,7 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 %files
 %doc README LICENSE
 %if "%{_httpd_modconfdir}" != "%{_httpd_confdir}"
-%config(noreplace) %{_httpd_modconfdir}/*.conf
+%config(noreplace) %{_httpd_modconfdir}/55-lookup_identity.conf
 %else
 %config(noreplace) %{_httpd_confdir}/lookup_identity.conf
 %endif
