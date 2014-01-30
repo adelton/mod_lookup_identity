@@ -4,7 +4,7 @@
 %{!?_httpd_modconfdir: %{expand: %%global _httpd_modconfdir %%{_sysconfdir}/httpd/conf.d}}
 %{!?_httpd_moddir:    %{expand: %%global _httpd_moddir    %%{_libdir}/httpd/modules}}
 
-Summary: Apache module to retrieve additional information about the authenticated user.
+Summary: Apache module to retrieve additional information about the authenticated user
 Name: mod_lookup_identity
 Version: 0.8.1
 Release: 1%{?dist}
