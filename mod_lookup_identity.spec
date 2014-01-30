@@ -7,7 +7,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user
 Name: mod_lookup_identity
-Version: 0.8.1
+Version: 0.8.2
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -58,21 +58,24 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 %{_httpd_moddir}/*.so
 
 %changelog
-* Fri Jan 17 2014 Jan Pazdziora - 0.8.1-1
+* Thu Jan 30 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.8.2-1
+- 1058812 - .spec changes for Fedora package review.
+
+* Fri Jan 17 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.8.1-1
 - Ensure we run before mod_headers so that our result can be put to
   request headers for mod_proxy.
 
-* Thu Jan 09 2014 Jan Pazdziora - 0.8-1
+* Thu Jan 09 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.8-1
 - Declare all functions static for proper isolation.
 
-* Thu Nov 21 2013 Jan Pazdziora - 0.7.1-1
+* Thu Nov 21 2013 Jan Pazdziora <jpazdziora@redhat.com> - 0.7.1-1
 - Address segfault when no LookupUserAttrIter is set.
 
-* Tue Nov 19 2013 Jan Pazdziora - 0.7-1
+* Tue Nov 19 2013 Jan Pazdziora <jpazdziora@redhat.com> - 0.7-1
 - Define lookup_identity_hook as optional function, callable from
   other modules.
 
-* Mon Nov 18 2013 Jan Pazdziora - 0.6-1
+* Mon Nov 18 2013 Jan Pazdziora <jpazdziora@redhat.com> - 0.6-1
 - Use org.freedesktop.sssd.infopipe.GetUserGroups for group lists.
 - Support new org.freedesktop.sssd.infopipe.GetUserAttr parameters /
   return values.
@@ -82,5 +85,5 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 - Added LookupUserGroupsIter and LookupUserAttrIter.
 - Added LookupDbusTimeout.
 
-* Mon Oct 28 2013 Jan Pazdziora - 0.5-1
+* Mon Oct 28 2013 Jan Pazdziora <jpazdziora@redhat.com> - 0.5-1
 - Initial release.
