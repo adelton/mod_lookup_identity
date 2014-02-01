@@ -7,7 +7,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user
 Name: mod_lookup_identity
-Version: 0.8.2
+Version: 0.8.3
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -18,7 +18,6 @@ BuildRequires: dbus-devel
 BuildRequires: pkgconfig
 Requires(pre): httpd
 Requires: httpd-mmn = %{_httpd_mmn}
-Requires: dbus-libs
 
 # Suppres auto-provides for module DSO per
 # https://fedoraproject.org/wiki/Packaging:AutoProvidesAndRequiresFiltering#Summary
@@ -59,6 +58,9 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 %{_httpd_moddir}/*.so
 
 %changelog
+* Sat Feb 01 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.8.3-1
+- 1058812 - drop explicit dbus-libs dependency.
+
 * Thu Jan 30 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.8.2-1
 - 1058812 - .spec changes for Fedora package review.
 
