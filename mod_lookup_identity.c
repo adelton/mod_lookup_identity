@@ -141,13 +141,13 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 		}
 		if (dbus_error_is_set(error)) {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-				"Error dbus calling %s(%s%s): %s: %s", method, user, args_string, error->name, error->message);
+				"Error dbus calling %s(%s, %s): %s: %s", method, user, args_string, error->name, error->message);
 		} else if (reply_type == DBUS_MESSAGE_TYPE_ERROR) {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-				"Error %s dbus calling %s(%s%s)", dbus_message_get_error_name(reply), method, user, args_string);
+				"Error %s dbus calling %s(%s, %s)", dbus_message_get_error_name(reply), method, user, args_string);
 		} else {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-				"Error unexpected reply type %d dbus calling %s(%s%s)", reply_type, method, user, args_string);
+				"Error unexpected reply type %d dbus calling %s(%s, %s)", reply_type, method, user, args_string);
 		}
 		if (reply) {
 			dbus_message_unref(reply);
