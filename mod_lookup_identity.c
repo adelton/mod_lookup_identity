@@ -158,12 +158,67 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 }
 #endif
 
-static void lookup_identity_output_data(request_rec * r, int the_output, char * key, char * value) {
+static void lookup_identity_output_iter_to(request_rec * r, apr_table_t * t, const char * key, const apr_array_header_t * values) {
+	int append = 0;
+	if (key[0] == '+') {
+		key++;
+		append = 1;
+	}
+	long start = 0;
+	const char * key_n = apr_pstrcat(r->pool, key, "_N", NULL);
+	if (append) {
+		const char * start_index = apr_table_get(t, key_n);
+		if (start_index) {
+			start = atol(start_index);
+		}
+	}
+	for (int i = 0; values && i < values->nelts; i++) {
+		apr_table_setn(t, apr_psprintf(r->pool, "%s_%ld", key, ++start), apr_pstrdup(r->pool, ((char **)values->elts)[i]));
+	}
+	apr_table_setn(t, key_n, apr_psprintf(r->pool, "%ld", start));
+}
+static void lookup_identity_output_iter(request_rec * r, int the_output, const char * key, const apr_array_header_t * values) {
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
-		apr_table_setn(r->notes, key, value);
+		lookup_identity_output_iter_to(r, r->notes, key, values);
 	}
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
-		apr_table_setn(r->subprocess_env, key, value);
+		lookup_identity_output_iter_to(r, r->subprocess_env, key, values);
+	}
+}
+
+static void lookup_identity_output_data_to(request_rec * r, apr_table_t * t, const char * key, const apr_array_header_t * values, const char * sep) {
+	int append = 0;
+	if (key[0] == '+') {
+		key++;
+		append = 1;
+	}
+	const char * value = apr_table_get(t, key);
+	char * out_value = NULL;
+	if (value) {
+		if (!(append && sep)) {
+			return;
+		}
+		out_value = apr_pstrdup(r->pool, value);
+	}
+	for (int i = 0; values && i < values->nelts; i++) {
+		if (!out_value) {
+			out_value = apr_pstrdup(r->pool, ((char **)values->elts)[i]);
+		} else {
+			if (!sep) {
+				break;
+			}
+			out_value = apr_pstrcat(r->pool, out_value, sep, NULL);
+			out_value = apr_pstrcat(r->pool, out_value, ((char **)values->elts)[i], NULL);
+		}
+	}
+	apr_table_setn(t, key, out_value);
+}
+static void lookup_identity_output_data(request_rec * r, int the_output, const char * key, const apr_array_header_t * values, const char * sep) {
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
+		lookup_identity_output_data_to(r, r->notes, key, values, sep);
+	}
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
+		lookup_identity_output_data_to(r, r->subprocess_env, key, values, sep);
 	}
 }
 
@@ -208,8 +263,11 @@ static int lookup_identity_hook(request_rec * r) {
 	}
 
 	if (the_config->output_gecos) {
+		apr_array_header_t * gecos_array = apr_array_make(r->pool, 1, sizeof(char *));
+		gecos_array = apr_array_make(r->pool, 1, sizeof(char *));
+		*(char **)apr_array_push(gecos_array) = pwd->pw_gecos;
 		lookup_identity_output_data(r, the_output,
-			the_config->output_gecos, pwd->pw_gecos);
+			the_config->output_gecos, gecos_array, NULL);
 	}
 
 #ifndef NO_USER_ATTR
@@ -232,31 +290,21 @@ static int lookup_identity_hook(request_rec * r) {
 				int num;
 				char ** ptr;
 				if (reply && dbus_message_get_args(reply, &error, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING, &ptr, &num, DBUS_TYPE_INVALID)) {
-					char * groups = "";
 					int i;
+					apr_array_header_t * values = NULL;
+					if (num) {
+						values = apr_array_make(r->pool, num, sizeof(char *));
+					}
 					for (i = 0; i < num; i++) {
 						ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server,
 							"dbus call %s returned group %s", DBUS_SSSD_GET_USER_GROUPS_METHOD, ptr[i]);
-						if (the_config->output_groups) {
-							if (i == 0) {
-								groups = apr_pstrdup(r->pool, ptr[i]);
-							} else if (i && the_config->output_groups_sep) {
-								groups = apr_pstrcat(r->pool, groups, the_config->output_groups_sep, ptr[i], NULL);
-							}
-						}
-						if (the_config->output_groups_iter) {
-							lookup_identity_output_data(r, the_output,
-								apr_psprintf(r->pool, "%s_%d", the_config->output_groups_iter, i + 1),
-								apr_pstrdup(r->pool, ptr[i]));
-						}
+						*(char **)apr_array_push(values) = ptr[i];
 					}
 					if (num && the_config->output_groups) {
-						lookup_identity_output_data(r, the_output, the_config->output_groups, groups);
+						lookup_identity_output_data(r, the_output, the_config->output_groups, values, the_config->output_groups_sep);
 					}
 					if (the_config->output_groups_iter) {
-						lookup_identity_output_data(r, the_output,
-							apr_pstrcat(r->pool, the_config->output_groups_iter, "_N", NULL),
-							apr_psprintf(r->pool, "%d", num));
+						lookup_identity_output_iter(r, the_output, the_config->output_groups_iter, values);
 					}
 					dbus_free_string_array(ptr);
 				}
@@ -297,7 +345,7 @@ static int lookup_identity_hook(request_rec * r) {
 								continue;
 							}
 							if (seen) {
-								apr_hash_set(seen, out_name, APR_HASH_KEY_STRING, "");
+								apr_hash_set(seen, attr_name, APR_HASH_KEY_STRING, "");
 							}
 							if (! dbus_message_iter_next(&dictiter)) {
 								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
@@ -325,37 +373,23 @@ static int lookup_identity_hook(request_rec * r) {
 							char * out_name_iter = the_config->output_user_attr_iter
 								? apr_hash_get(the_config->output_user_attr_iter, attr_name, APR_HASH_KEY_STRING)
 								: NULL;
-							char * out_value = "";
-							int i = 0;
+
+							apr_array_header_t * values = NULL;
 							do {
 								char * r_data;
 								dbus_message_iter_get_basic(&dictiter, &r_data);
 								ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server,
 									"dbus call %s returned attr %s=%s", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name, r_data);
-								if (out_name && strlen(out_name)) {
-									if (i == 0) {
-										out_value = apr_pstrdup(r->pool, r_data);
-									} else if (i && out_sep) {
-										out_value = apr_pstrcat(r->pool, out_value, out_sep, r_data, NULL);
-									}
+								if (! values) {
+									values = apr_array_make(r->pool, 1, sizeof(char *));
 								}
-								if (out_name_iter) {
-									lookup_identity_output_data(r, the_output,
-										apr_psprintf(r->pool, "%s_%d", out_name_iter, i + 1),
-										apr_pstrdup(r->pool, r_data));
-								}
-								i++;
-								if (!(out_sep || out_name_iter)) {
-									break;
-								}
+								*(char **)apr_array_push(values) = r_data;
 							} while (dbus_message_iter_next(&dictiter));
-							if (i && strlen(out_name)) {
-								lookup_identity_output_data(r, the_output, out_name, out_value);
+							if (values && strlen(out_name)) {
+								lookup_identity_output_data(r, the_output, out_name, values, out_sep);
 							}
 							if (out_name_iter) {
-								lookup_identity_output_data(r, the_output,
-									apr_pstrcat(r->pool, out_name_iter, "_N", NULL),
-									apr_psprintf(r->pool, "%d", i));
+								lookup_identity_output_iter(r, the_output, out_name_iter, values);
 							}
 						} while (dbus_message_iter_next(&iter));
 					}
@@ -368,7 +402,7 @@ static int lookup_identity_hook(request_rec * r) {
 						void * value;
 						apr_hash_this(hi, &key, NULL, &value);
 						if (! apr_hash_get(seen, key, APR_HASH_KEY_STRING)) {
-							lookup_identity_output_data(r, the_output, apr_pstrcat(r->pool, value, "_N", NULL), "0");
+							lookup_identity_output_iter(r, the_output, value, NULL);
 						}
 						hi = apr_hash_next(hi);
 					}

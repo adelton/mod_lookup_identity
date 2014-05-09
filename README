@@ -52,9 +52,13 @@ The default behaviour can be changed with the following directives:
     LookupUserGECOS name
 
 	Name of the note and/or environment variable for the GECOS
-	value.
+	value. If prefixed with '+' sign, it is set only if the
+	note/environment variable is not set yet, otherwise the
+	value is overwritten.
 
 	Example: LookupUserGECOS REMOTE_USER_FULLNAME
+
+	Example: LookupUserGECOS +REMOTE_USER_GECOS
 
 	Default is REMOTE_USER_GECOS.
 
@@ -74,14 +78,35 @@ The default behaviour can be changed with the following directives:
 
 	    LookupUserGroups REMOTE_USER_GROUPS :
 
-	will set value of REMOTE_USER_GROUPS to staff:student. If the
-	option is
+	will set value of REMOTE_USER_GROUPS to staff:student (or
+	student:staff, depending on the order returned by the sssd
+	dbus call). If the option is
 
 	    LookupUserGroups REMOTE_USER_GROUPS
 
-	the value will be either staff or student, depending on the
-	order returned by the sssd dbus call (order not to be relied
-	on).
+	the value will be either staff or student (the first in the list
+	returned by the sssd dbus call (order not to be relied on).
+
+	When prefixed with '+' sign and the note/environment variable
+	already has some value set, behaviour differs depending on
+	whether the optional separator is specified or not. If it is,
+	the string with separator-separated values is appended after
+	separator to existing value. If separator is not specified,
+	existing value is preserved.
+
+	Example: when user alice is member of groups staff and student,
+	and the environment variable REMOTE_USER_GROUPS already has
+	value "anonymous" set (by Apache configuration or by some
+	module that was invoked before mod_lookup_identity), directive
+
+	    LookupUserGroups +REMOTE_USER_GROUPS :
+
+	will set the value to "anonymous:staff:student" (or
+	"anonymous:student:staff"). On the other hand,
+
+	    LookupUserGroups +REMOTE_USER_GROUPS
+
+	would leave the value unchanged at anonymous.
 
 	By default, groups are not retrieved.
 
@@ -111,6 +136,21 @@ The default behaviour can be changed with the following directives:
 	If user is not a member of any group, the <name>_N value will
 	be set to 0.
 
+	When the name is prefixed with '+' sign, existing values are
+	preserved and new values added to the list. Thus, if alice is
+	member of groups staff and student and REMOTE_USER_GROUPS_N
+	already has value 2 set and the directive is
+
+	    LookupUserGroupsIter +REMOTE_USER_GROUPS
+
+	the module will set values of REMOTE_USER_GROUPS_3
+	and REMOTE_USER_GROUPS_4 and will update REMOTE_USER_GROUPS_N
+	to value 4. The module will however not check/fix the consistency
+	of existing values; if REMOTE_USER_GROUPS_N is set to value 2
+	prior to invocation of mod_lookup_identity, it will not check
+	if REMOTE_USER_GROUPS_1 and REMOTE_USER_GROUPS_2 are set to match
+	REMOTE_USER_GROUPS_N.
+
 	By default, groups are not retrieved.
 
     LookupUserAttr the_attribute name [separator]
@@ -125,13 +165,30 @@ The default behaviour can be changed with the following directives:
 	note/environment variable. If the separator is not specified,
 	only one value is set.
 
-	Example: LookupUserAttr mail REMOTE_USER_MAIL will retrieve
-	one value from the mail attribute (from potentially
+	Example:
+
+	    LookupUserAttr mail REMOTE_USER_MAIL
+
+	will retrieve one value from the mail attribute (from potentially
 	multivalued attribute) and store them to note/environment
 	variable REMOTE_USER_MAIL.
 
-	LookupUserAttr mail REMOTE_USER_MAIL ", " will retrieve all
-	the values and store them as coma-separated string.
+	Directive
+
+	    LookupUserAttr mail REMOTE_USER_MAIL ", "
+
+	will retrieve all the values and store them as coma-separated
+	string.
+
+	When the name is prefixed with '+' sign, similar to LookupUserGroups
+	it will only set the value if not set yet, or append to existing
+	value if separator is specified: when
+
+	    LookupUserAttr team +REMOTE_USER_TEAMS ", "
+
+	is configured and REMOTE_USER_ORGS is already set to "IT" and
+	the sssd dbus returned values "Helpdesk" and "Support", the
+	resulting value will be "IT, Helpdek, Support".
 
 	Multiple LookupUserAttr lines can be used to retrieve multiple
 	attributes.
@@ -158,6 +215,10 @@ The default behaviour can be changed with the following directives:
 	    REMOTE_USER_OFFICE_N=2
 	    REMOTE_USER_OFFICE_1=M314
 	    REMOTE_USER_OFFICE_2=P005
+
+	When the '+' sign is used, behaviour matches the behaviour of
+	LookupUserGroupsIter -- the list formed by _N and _# variables
+	is appended to.
 
 	Multiple LookupUserAttr lines can be used to retrieve multiple
 	attributes.
