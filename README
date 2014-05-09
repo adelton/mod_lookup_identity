@@ -85,7 +85,7 @@ The default behaviour can be changed with the following directives:
 	    LookupUserGroups REMOTE_USER_GROUPS
 
 	the value will be either staff or student (the first in the list
-	returned by the sssd dbus call (order not to be relied on).
+	returned by the sssd dbus call; order not to be relied on).
 
 	When prefixed with '+' sign and the note/environment variable
 	already has some value set, behaviour differs depending on
@@ -106,7 +106,7 @@ The default behaviour can be changed with the following directives:
 
 	    LookupUserGroups +REMOTE_USER_GROUPS
 
-	would leave the value unchanged at anonymous.
+	would leave the value unchanged at "anonymous".
 
 	By default, groups are not retrieved.
 
