@@ -80,21 +80,13 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 	char * user = r->user;
 	int nargs = 0;
 	const char ** args = NULL;
-	if (hash) {
+	if (hash && (nargs = apr_hash_count(hash))) {
 		apr_hash_index_t * hi = apr_hash_first(r->pool, hash);
-		while (hi) {
-			nargs++;
-			hi = apr_hash_next(hi);
-		}
-		if (nargs) {
-			args = apr_pcalloc(r->pool, nargs * sizeof(char *));
-			hi = apr_hash_first(r->pool, hash);
-			int i;
+		args = apr_pcalloc(r->pool, nargs * sizeof(char *));
+		for (int i = 0; hi; hi = apr_hash_next(hi), i++) {
 			const void * ptr;
-			for (i = 0; hi; hi = apr_hash_next(hi), i++) {
-				apr_hash_this(hi, &ptr, NULL, NULL);
-				args[i] = ptr;
-			}
+			apr_hash_this(hi, &ptr, NULL, NULL);
+			args[i] = ptr;
 		}
 	}
 	if (args) {
