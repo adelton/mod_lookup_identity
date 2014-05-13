@@ -7,7 +7,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user
 Name: mod_lookup_identity
-Version: 0.8.3
+Version: 0.9.0
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -58,6 +58,11 @@ install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup
 %{_httpd_moddir}/*.so
 
 %changelog
+* Tue May 13 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.9.0-1
+- Add support for '+'-prefixed note/variable names.
+- Silence compile warnings by specifying C99.
+- Fix format of logs of dbus calls.
+
 * Sat Feb 01 2014 Jan Pazdziora <jpazdziora@redhat.com> - 0.8.3-1
 - 1058812 - drop explicit dbus-libs dependency.
 
