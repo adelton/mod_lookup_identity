@@ -116,7 +116,7 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 	}
 	if (is_error) {
 		char * args_string = "";
-		if (nargs) {
+		if (args) {
 			int total_args_length = 0;
 			int i;
 			for (i = 0; i < nargs; i++) {
