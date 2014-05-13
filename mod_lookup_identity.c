@@ -256,7 +256,6 @@ static int lookup_identity_hook(request_rec * r) {
 
 	if (the_config->output_gecos) {
 		apr_array_header_t * gecos_array = apr_array_make(r->pool, 1, sizeof(char *));
-		gecos_array = apr_array_make(r->pool, 1, sizeof(char *));
 		*(char **)apr_array_push(gecos_array) = pwd->pw_gecos;
 		lookup_identity_output_data(r, the_output,
 			the_config->output_gecos, gecos_array, NULL);
