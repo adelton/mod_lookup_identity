@@ -234,10 +234,8 @@ static int lookup_identity_hook(request_rec * r) {
 		} else {
 			the_config = srv_cfg;
 		}
-	} else if (cfg) {
-		the_config = cfg;
 	} else {
-		the_config = create_common_conf(r->pool);
+		the_config = cfg;
 	}
 
 	int the_output = the_config->output;
