@@ -35,6 +35,14 @@ Use of REMOTE_USER_* environment variables is recommended.
 
 %build
 %{_httpd_apxs} -c -Wc,"%{optflags} -Wall -pedantic -std=c99 $(pkg-config --cflags dbus-1)" $(pkg-config --libs dbus-1) mod_lookup_identity.c
+%if "%{_httpd_modconfdir}" != "%{_httpd_confdir}"
+echo > lookup_identity.confx
+echo "# Load the module in %{_httpd_modconfdir}/55-lookup_identity.conf" >> lookup_identity.confx
+cat lookup_identity.conf >> lookup_identity.confx
+%else
+cat lookup_identity.module > lookup_identity.confx
+cat lookup_identity.conf >> lookup_identity.confx
+%endif
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -42,19 +50,16 @@ install -Dm 755 .libs/mod_lookup_identity.so $RPM_BUILD_ROOT%{_httpd_moddir}/mod
 
 %if "%{_httpd_modconfdir}" != "%{_httpd_confdir}"
 # httpd >= 2.4.x
-install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_modconfdir}/55-lookup_identity.conf
-%else
-# httpd <= 2.2.x
-install -Dp -m 0644 lookup_identity.conf $RPM_BUILD_ROOT%{_httpd_confdir}/lookup_identity.conf
+install -Dp -m 0644 lookup_identity.module $RPM_BUILD_ROOT%{_httpd_modconfdir}/55-lookup_identity.conf
 %endif
+install -Dp -m 0644 lookup_identity.confx $RPM_BUILD_ROOT%{_httpd_confdir}/lookup_identity.conf
 
 %files
 %doc README LICENSE
 %if "%{_httpd_modconfdir}" != "%{_httpd_confdir}"
 %config(noreplace) %{_httpd_modconfdir}/55-lookup_identity.conf
-%else
-%config(noreplace) %{_httpd_confdir}/lookup_identity.conf
 %endif
+%config(noreplace) %{_httpd_confdir}/lookup_identity.conf
 %{_httpd_moddir}/*.so
 
 %changelog
