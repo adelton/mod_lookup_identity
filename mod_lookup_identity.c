@@ -300,6 +300,9 @@ static int lookup_identity_hook(request_rec * r) {
 				if (reply) {
 					dbus_message_unref(reply);
 				}
+				if (dbus_error_is_set(&error)) {
+					dbus_error_free(&error);
+				}
 			}
 			if (the_config->output_user_attr) {
 				apr_hash_t * seen = NULL;
