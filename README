@@ -2,21 +2,59 @@
 Apache module mod_lookup_identity
 =================================
 
-Apache module to retrieve additional information about the
-authenticated user.
+Apache module to lookup user identifier and retrieve additional
+information about the authenticated user.
 
-It retrieves the GECOS information using the getpwnam call and stores
-it in a note/environment variable (by default REMOTE_USER_GECOS).
-It allows to get list of group names the user belongs using sssd dbus
-org.freedesktop.sssd.infopipe.GetUserGroups call and any custom
-attribute configured in /etc/sssd/sssd.conf using sssd dbus
-org.freedesktop.sssd.infopipe.GetUserAttr call.
+The module supports lookup of the user identifier based on certificate
+via SSSD D-Bus call org.freedesktop.sssd.infopipe.Users.FindByCertificate,
+setting up the r->user request structure.
+
+It also allows retrieval of list of group names the user belongs to
+using org.freedesktop.sssd.infopipe.GetUserGroups call and any
+custom attributes configured in /etc/sssd/sssd.conf using with
+org.freedesktop.sssd.infopipe.GetUserAttr call. It also retrieves
+the GECOS information using the getpwnam call. The retrieved values
+get stored in notes/environment variables.
 
 The sssd-dbus package needs to be installed and the ifp service
-enabled in the [sssd] section of /etc/sssd/sssd.conf. Caching of
-non-POSIX attributes need to be enabled in the [domain/*] section of
-/etc/sssd/sssd.conf, configuration ldap_user_extra_attrs, and they
-also need to be enabled in the [ifp] section using the user_attributes
+enabled in the [sssd] section of /etc/sssd/sssd.conf.
+
+The module itself needs to be loaded into Apache's configuration file
+like /etc/httpd/conf/httpd.conf with directive like
+
+    LoadModule lookup_identity_module modules/mod_lookup_identity.so
+
+User Lookup
+-----------
+
+By default, no user identifier lookup is enabled. Directive
+
+    LookupUserByCertificate On
+
+enables the lookup. It uses the original internal r->user value
+as input, so the typical setup for example with mod_ssl will be
+
+    SSLVerifyClient require
+    SSLUserName SSL_CLIENT_CERT
+    LookupUserByCertificate On
+
+when mod_ssl puts the certificate to the username field and then
+mod_lookup_identity replaces it with user identifier found with
+org.freedesktop.sssd.infopipe.Users.FindByCertificate. If no user
+is found based on the certificate, the r->user value is cleared.
+Make sure the FakeBasicAuth is not enable in SSLOptions or the
+r->user will not be set.
+
+SSSD version 1.13 or higher is needed for LookupUserByCertificate
+functionality.
+
+Retrieving Group Membership and Attributes
+------------------------------------------
+
+For the custom attributes fetching, caching of non-POSIX attributes
+needs to be enabled in the [domain/*] section of /etc/sssd/sssd.conf,
+configuration ldap_user_extra_attrs, and the attributes also need to
+be enabled in the [ifp] section using the user_attributes
 configuration option.
 
 Example of sssd.conf:
@@ -31,11 +69,6 @@ Example of sssd.conf:
     [ifp]
     allowed_uids = apache, root
     user_attributes = +mail, +telephoneNumber, +givenname, +sn
-
-The module itself needs to be loaded into Apache's configuration file
-like /etc/httpd/conf/httpd.conf with directive like
-
-    LoadModule lookup_identity_module modules/mod_lookup_identity.so
 
 The default behaviour can be changed with the following directives:
 
@@ -266,7 +299,7 @@ in and will not be available.
 License
 -------
 
-Copyright 2013--2014 Jan Pazdziora
+Copyright 2013--2015 Jan Pazdziora
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

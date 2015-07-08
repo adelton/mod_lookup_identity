@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2013--2014 Jan Pazdziora
+ * Copyright 2013--2015 Jan Pazdziora
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,11 +33,18 @@
 #ifndef NO_USER_ATTR
 #include <dbus/dbus.h>
 #define DBUS_SSSD_PATH "/org/freedesktop/sssd/infopipe"
+#define DBUS_SSSD_PATH_USERS "/org/freedesktop/sssd/infopipe/Users"
 #define DBUS_SSSD_IFACE "org.freedesktop.sssd.infopipe"
+#define DBUS_SSSD_IFACE_USERS "org.freedesktop.sssd.infopipe.Users"
 #define DBUS_SSSD_GET_USER_GROUPS_METHOD "GetUserGroups"
 #define DBUS_SSSD_GET_USER_ATTR_METHOD "GetUserAttr"
+#define DBUS_SSSD_FIND_BY_CERTIFICATE "FindByCertificate"
 #define DBUS_SSSD_DEST "org.freedesktop.sssd.infopipe"
 #define DBUS_SSSD_TIMEOUT 5000
+#define DBUS_PROPERTIES "org.freedesktop.DBus.Properties"
+#define DBUS_PROPERTIES_GET "Get"
+#define DBUS_SSSD_USERS_USER "org.freedesktop.sssd.infopipe.Users.User"
+#define DBUS_SSSD_USERS_ID "name";
 #endif
 
 static const int LOOKUP_IDENTITY_OUTPUT_NONE = 0;
@@ -60,12 +67,158 @@ typedef struct lookup_identity_config {
 	apr_hash_t * output_user_attr_sep;
 	apr_hash_t * output_user_attr_iter;
 	int dbus_timeout;
+	signed char lookup_by_certificate;
 #endif
 } lookup_identity_config;
 
 module AP_MODULE_DECLARE_DATA lookup_identity_module;
 
 #ifndef NO_USER_ATTR
+static int lookup_user_by_certificate(request_rec * r) {
+	const lookup_identity_config * cfg = (lookup_identity_config *) ap_get_module_config(r->per_dir_config, &lookup_identity_module);
+	if (cfg->lookup_by_certificate < 1 || ! r->user) {
+		return DECLINED;
+	}
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server, "lookup_user_by_certificate invoked [%s]", r->user);
+
+	static char * stage = NULL;
+	DBusError error;
+	dbus_error_init(&error);
+	DBusMessage * message = NULL;
+	DBusMessage * reply = NULL;
+
+	DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
+	if (! connection) {
+		stage = "dbus_bus_get(DBUS_BUS_SYSTEM)";
+		goto fail;
+	}
+	dbus_connection_set_exit_on_disconnect(connection, FALSE);
+
+	message = dbus_message_new_method_call(DBUS_SSSD_DEST,
+		DBUS_SSSD_PATH_USERS,
+		DBUS_SSSD_IFACE_USERS,
+		DBUS_SSSD_FIND_BY_CERTIFICATE);
+	if (! message) {
+		stage = "dbus_message_new_method_call(" DBUS_SSSD_IFACE_USERS "." DBUS_SSSD_FIND_BY_CERTIFICATE ")";
+		goto fail;
+	}
+	dbus_message_set_auto_start(message, TRUE);
+	if (! dbus_message_append_args(message,
+		DBUS_TYPE_STRING, &(r->user),
+		DBUS_TYPE_INVALID)) {
+		stage = apr_psprintf(r->pool, "dbus_message_append_args(%s)", r->user);
+		goto fail;
+	}
+
+        int timeout = DBUS_SSSD_TIMEOUT;
+        if (cfg->dbus_timeout > 0) {
+                timeout = cfg->dbus_timeout;
+        }
+
+	reply = dbus_connection_send_with_reply_and_block(connection,
+		message, timeout, &error);
+	if (! reply || dbus_error_is_set(&error)) {
+		stage = "dbus_connection_send_with_reply_and_block(" DBUS_SSSD_IFACE_USERS "." DBUS_SSSD_FIND_BY_CERTIFICATE ")";
+		goto fail;
+	}
+	int reply_type = dbus_message_get_type(reply);
+	if (reply_type != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
+		stage = apr_psprintf(r->pool, DBUS_SSSD_IFACE_USERS "." DBUS_SSSD_FIND_BY_CERTIFICATE " returned [%d], not DBUS_MESSAGE_TYPE_METHOD_RETURN", reply_type);
+		goto fail;
+	}
+
+	const char *path;
+	if (! dbus_message_get_args(reply, NULL, DBUS_TYPE_OBJECT_PATH, &path, DBUS_TYPE_INVALID)) {
+		stage = DBUS_SSSD_IFACE_USERS "." DBUS_SSSD_FIND_BY_CERTIFICATE ": return arg not DBUS_TYPE_OBJECT_PATH";
+		goto fail;
+	}
+
+	ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server, "lookup_user_by_certificate got object [%s]", path);
+
+	dbus_message_unref(message);
+	message = dbus_message_new_method_call(DBUS_SSSD_DEST,
+		path,
+		DBUS_PROPERTIES,
+		DBUS_PROPERTIES_GET);
+	if (! message) {
+		stage = "dbus_message_new_method_call(" DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ")";
+		goto fail;
+	}
+	dbus_message_set_auto_start(message, TRUE);
+	const char * users_user = DBUS_SSSD_USERS_USER;
+	const char * attrib_name = DBUS_SSSD_USERS_ID;
+	if (! dbus_message_append_args(message,
+		DBUS_TYPE_STRING, &users_user,
+		DBUS_TYPE_STRING, &attrib_name,
+		DBUS_TYPE_INVALID)) {
+		stage = apr_psprintf(r->pool, "dbus_message_append_args(%s, %s)", users_user, attrib_name);
+		goto fail;
+	}
+
+	dbus_message_unref(reply);
+	reply = dbus_connection_send_with_reply_and_block(connection,
+		message, timeout, &error);
+	dbus_message_unref(message);
+	if (!reply || dbus_error_is_set(&error)) {
+		stage = "dbus_connection_send_with_reply_and_block(" DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ")";
+		goto fail;
+	}
+	reply_type = dbus_message_get_type(reply);
+	if (reply_type != DBUS_MESSAGE_TYPE_METHOD_RETURN) {
+		stage = apr_psprintf(r->pool, DBUS_SSSD_IFACE_USERS "." DBUS_SSSD_FIND_BY_CERTIFICATE " returned [%d], not DBUS_MESSAGE_TYPE_METHOD_RETURN", reply_type);
+		goto fail;
+	}
+
+	DBusMessageIter iter, variter;
+	if (! dbus_message_iter_init(reply, &iter)) {
+		stage = DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ": did not return any arguments";
+		goto fail;
+	}
+
+	int type = dbus_message_iter_get_arg_type(&iter);
+	if (type != DBUS_TYPE_VARIANT) {
+		stage = DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ": result is not DBUS_TYPE_VARIANT";
+		goto fail;
+	}
+
+	dbus_message_iter_recurse(&iter, &variter);
+	type = dbus_message_iter_get_arg_type(&variter);
+	if (type == DBUS_TYPE_STRING) {
+		char * r_data;
+		dbus_message_iter_get_basic(&variter, &r_data);
+		r->user = apr_pstrdup(r->pool, r_data);
+		ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, r->server, "lookup_user_by_certificate found [%s]", r->user);
+	}
+	if (dbus_message_iter_next(&variter) || dbus_message_iter_next(&iter)) {
+		stage = DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ": result is not unique";
+		goto fail;
+	}
+
+	goto pass;
+
+fail:
+	if (dbus_error_is_set(&error)) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "lookup_user_by_certificate failed [%s]: [%s]", stage, error.message);
+	} else if (stage) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "lookup_user_by_certificate failed [%s]", stage);
+	}
+	r->user = NULL;
+
+pass:
+	if (! r->user) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "lookup_user_by_certificate cleared r->user");
+	}
+	if (reply) {
+		dbus_message_unref(reply);
+	}
+	if (connection) {
+		dbus_connection_unref(connection);
+	}
+	dbus_error_free(&error);
+
+	return DECLINED;
+}
+
 static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnection * connection, DBusError * error, int timeout, const char * method, apr_hash_t * hash) {
 	DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_DEST,
 		DBUS_SSSD_PATH,
@@ -481,6 +634,9 @@ static lookup_identity_config * create_common_conf(apr_pool_t * pool) {
 	if (cfg) {
 		cfg->output = LOOKUP_IDENTITY_OUTPUT_DEFAULT;
 		cfg->output_gecos = LOOKUP_IDENTITY_OUTPUT_GECOS;
+#ifndef NO_USER_ATTR
+		cfg->lookup_by_certificate = -1;
+#endif
 	}
 	return cfg;
 }
@@ -539,6 +695,7 @@ static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_voi
 		cfg->output_user_attr_iter = add->output_user_attr_iter;
 	}
 	cfg->dbus_timeout = add->dbus_timeout ? add->dbus_timeout : base->dbus_timeout;
+	cfg->lookup_by_certificate = (add->lookup_by_certificate == -1) ? base->lookup_by_certificate : add->lookup_by_certificate;
 #endif
 	return cfg;
 }
@@ -552,13 +709,21 @@ static const command_rec directives[] = {
 	AP_INIT_TAKE23("LookupUserAttr", set_user_attr, NULL, RSRC_CONF | ACCESS_CONF, "Additional user attribute (attr, note/variable name, separator)"),
 	AP_INIT_TAKE2("LookupUserAttrIter", set_user_attr_iter, NULL, RSRC_CONF | ACCESS_CONF, "Additional user attributes (attr, note/variable name)"),
 	AP_INIT_TAKE1("LookupDbusTimeout", ap_set_int_slot, (void*)APR_OFFSETOF(lookup_identity_config, dbus_timeout), RSRC_CONF | ACCESS_CONF, "Timeout for sssd dbus calls (in ms)"),
+	AP_INIT_FLAG("LookupUserByCertificate", ap_set_flag_slot_char, (void*)APR_OFFSETOF(lookup_identity_config, lookup_by_certificate), RSRC_CONF | ACCESS_CONF, "Use org.freedesktop.sssd.infopipe.Users.FindByCertificate to lookup user identity"),
 #endif
 	{ NULL }
 };
 
 static void register_hooks(apr_pool_t * pool) {
-	static const char * const aszSucc[] = {"mod_headers.c", NULL};
-	ap_hook_fixups(lookup_identity_hook, NULL, aszSucc, APR_HOOK_LAST);
+#ifndef NO_USER_ATTR
+        static const char * const access_succ[] = {"mod_authz_core.c", NULL};
+        static const char * const access_pred[] = {"mod_ssl.c", NULL};
+        ap_hook_check_access(lookup_user_by_certificate, access_pred, access_succ, APR_HOOK_MIDDLE,
+                                        AP_AUTH_INTERNAL_PER_CONF);
+#endif
+
+	static const char * const fixup_succ[] = {"mod_headers.c", NULL};
+	ap_hook_fixups(lookup_identity_hook, NULL, fixup_succ, APR_HOOK_LAST);
 	APR_REGISTER_OPTIONAL_FN(lookup_identity_hook);
 }
 
