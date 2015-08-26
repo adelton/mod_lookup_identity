@@ -47,11 +47,12 @@
 #define DBUS_SSSD_USERS_ID "name";
 #endif
 
-static const int LOOKUP_IDENTITY_OUTPUT_NONE = 0;
+static const int LOOKUP_IDENTITY_OUTPUT_DEFAULT = 0;
+
+static const int LOOKUP_IDENTITY_OUTPUT_NONE = 128;
 static const int LOOKUP_IDENTITY_OUTPUT_NOTES = 1;
 static const int LOOKUP_IDENTITY_OUTPUT_ENV = 2;
-static const int LOOKUP_IDENTITY_OUTPUT_ALL = 3;
-static const int LOOKUP_IDENTITY_OUTPUT_DEFAULT = 4;
+static const int LOOKUP_IDENTITY_OUTPUT_HEADERS = 4;
 
 static char * LOOKUP_IDENTITY_OUTPUT_GECOS = "REMOTE_USER_GECOS";
 
@@ -329,6 +330,9 @@ static void lookup_identity_output_iter(request_rec * r, int the_output, const c
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
 		lookup_identity_output_iter_to(r, r->subprocess_env, key, values);
 	}
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
+		lookup_identity_output_iter_to(r, r->headers_in, key, values);
+	}
 }
 
 static void lookup_identity_output_data_to(request_rec * r, apr_table_t * t, const char * key, const apr_array_header_t * values, const char * sep) {
@@ -365,6 +369,9 @@ static void lookup_identity_output_data(request_rec * r, int the_output, const c
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
 		lookup_identity_output_data_to(r, r->subprocess_env, key, values, sep);
 	}
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
+		lookup_identity_output_data_to(r, r->headers_in, key, values, sep);
+	}
 }
 
 static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_void);
@@ -393,8 +400,8 @@ static int lookup_identity_hook(request_rec * r) {
 
 	int the_output = the_config->output;
 	if (the_output == LOOKUP_IDENTITY_OUTPUT_DEFAULT) {
-		the_output = LOOKUP_IDENTITY_OUTPUT_ALL;
-	} else if (!(the_output & LOOKUP_IDENTITY_OUTPUT_ALL)) {
+		the_output = LOOKUP_IDENTITY_OUTPUT_NOTES | LOOKUP_IDENTITY_OUTPUT_ENV;
+	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_NONE) {
 		return DECLINED;
 	}
 
@@ -570,11 +577,15 @@ static const char * set_output(cmd_parms * cmd, void * conf_void, const char * a
 		if (!strcasecmp(arg, "none")) {
 			cfg->output = LOOKUP_IDENTITY_OUTPUT_NONE;
 		} else if (!strcasecmp(arg, "all")) {
-			cfg->output = LOOKUP_IDENTITY_OUTPUT_ALL;
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_ENV | LOOKUP_IDENTITY_OUTPUT_NOTES;
+			ap_log_error(APLOG_MARK, APLOG_ERR, 0, cmd->server,
+				"LookupOutput all is deprecated, use none, env, notes, or headers");
 		} else if (!strcasecmp(arg, "env")) {
-			cfg->output = LOOKUP_IDENTITY_OUTPUT_ENV;
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_ENV;
 		} else if (!strcasecmp(arg, "notes")) {
-			cfg->output = LOOKUP_IDENTITY_OUTPUT_NOTES;
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_NOTES;
+		} else if (!strcasecmp(arg, "headers")) {
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS;
 		}
 	}
 	return NULL;
@@ -701,7 +712,7 @@ static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_voi
 }
 
 static const command_rec directives[] = {
-	AP_INIT_TAKE1("LookupOutput", set_output, NULL, RSRC_CONF | ACCESS_CONF, "Specify where the lookup results should be stored (note or variable)"),
+	AP_INIT_TAKE1("LookupOutput", set_output, NULL, RSRC_CONF | ACCESS_CONF, "Specify where the lookup results should be stored (notes, variables, headers)"),
 	AP_INIT_TAKE1("LookupUserGECOS", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, output_gecos), RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the GECOS information"),
 #ifndef NO_USER_ATTR
 	AP_INIT_TAKE12("LookupUserGroups", set_output_groups, NULL, RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the group information"),

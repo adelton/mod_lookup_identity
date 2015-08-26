@@ -80,7 +80,9 @@ The default behaviour can be changed with the following directives:
 	    None: Disable the lookup altogether
 	    Notes: Sets the Apache notes table only
 	    Env: Sets environment variables only
-	    All: Sets both (the default)
+	    Headers: Sets HTTP request headers, for use by proxy setups.
+
+	The default is Notes and Env.
 
     LookupUserGECOS name
 
