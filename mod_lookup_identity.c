@@ -304,14 +304,14 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 }
 #endif
 
-static void lookup_identity_output_iter_to(request_rec * r, apr_table_t * t, const char * key, const apr_array_header_t * values) {
+static void lookup_identity_output_iter_to(request_rec * r, apr_table_t * t, const char * key, const char * sep, const apr_array_header_t * values) {
 	int append = 0;
 	if (key[0] == '+') {
 		key++;
 		append = 1;
 	}
 	long start = 0;
-	const char * key_n = apr_pstrcat(r->pool, key, "_N", NULL);
+	const char * key_n = apr_pstrcat(r->pool, key, sep, "N", NULL);
 	if (append) {
 		const char * start_index = apr_table_get(t, key_n);
 		if (start_index) {
@@ -319,19 +319,19 @@ static void lookup_identity_output_iter_to(request_rec * r, apr_table_t * t, con
 		}
 	}
 	for (int i = 0; values && i < values->nelts; i++) {
-		apr_table_setn(t, apr_psprintf(r->pool, "%s_%ld", key, ++start), apr_pstrdup(r->pool, ((char **)values->elts)[i]));
+		apr_table_setn(t, apr_psprintf(r->pool, "%s%s%ld", key, sep, ++start), apr_pstrdup(r->pool, ((char **)values->elts)[i]));
 	}
 	apr_table_setn(t, key_n, apr_psprintf(r->pool, "%ld", start));
 }
 static void lookup_identity_output_iter(request_rec * r, int the_output, const char * key, const apr_array_header_t * values) {
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
-		lookup_identity_output_iter_to(r, r->notes, key, values);
+		lookup_identity_output_iter_to(r, r->notes, key, "_", values);
 	}
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
-		lookup_identity_output_iter_to(r, r->subprocess_env, key, values);
+		lookup_identity_output_iter_to(r, r->subprocess_env, key, "_", values);
 	}
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
-		lookup_identity_output_iter_to(r, r->headers_in, key, values);
+		lookup_identity_output_iter_to(r, r->headers_in, key, "-", values);
 	}
 }
 
