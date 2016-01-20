@@ -69,7 +69,7 @@ typedef struct lookup_identity_config {
 	apr_hash_t * output_user_attr_sep;
 	apr_hash_t * output_user_attr_iter;
 	int dbus_timeout;
-	signed char lookup_by_certificate;
+	int lookup_by_certificate;
 #endif
 } lookup_identity_config;
 
@@ -738,7 +738,7 @@ static const command_rec directives[] = {
 	AP_INIT_TAKE23("LookupUserAttr", set_user_attr, NULL, RSRC_CONF | ACCESS_CONF, "Additional user attribute (attr, note/variable name, separator)"),
 	AP_INIT_TAKE2("LookupUserAttrIter", set_user_attr_iter, NULL, RSRC_CONF | ACCESS_CONF, "Additional user attributes (attr, note/variable name)"),
 	AP_INIT_TAKE1("LookupDbusTimeout", ap_set_int_slot, (void*)APR_OFFSETOF(lookup_identity_config, dbus_timeout), RSRC_CONF | ACCESS_CONF, "Timeout for sssd dbus calls (in ms)"),
-	AP_INIT_FLAG("LookupUserByCertificate", ap_set_flag_slot_char, (void*)APR_OFFSETOF(lookup_identity_config, lookup_by_certificate), RSRC_CONF | ACCESS_CONF, "Use org.freedesktop.sssd.infopipe.Users.FindByCertificate to lookup user identity"),
+	AP_INIT_FLAG("LookupUserByCertificate", ap_set_flag_slot, (void*)APR_OFFSETOF(lookup_identity_config, lookup_by_certificate), RSRC_CONF | ACCESS_CONF, "Use org.freedesktop.sssd.infopipe.Users.FindByCertificate to lookup user identity"),
 #endif
 	{ NULL }
 };
@@ -747,8 +747,12 @@ static void register_hooks(apr_pool_t * pool) {
 #ifndef NO_USER_ATTR
 	static const char * const access_succ[] = {"mod_authz_core.c", NULL};
 	static const char * const access_pred[] = {"mod_ssl.c", NULL};
+#ifdef AP_AUTH_INTERNAL_PER_CONF
 	ap_hook_check_access(lookup_user_by_certificate, access_pred, access_succ, APR_HOOK_MIDDLE,
 					AP_AUTH_INTERNAL_PER_CONF);
+#else
+	ap_hook_access_checker(lookup_user_by_certificate, access_pred, access_succ, APR_HOOK_MIDDLE);
+#endif
 #endif
 
 	static const char * const fixup_succ[] = {"mod_headers.c", NULL};
