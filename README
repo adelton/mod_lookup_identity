@@ -241,7 +241,7 @@ The default behaviour can be changed with the following directives:
 
 	    LookupUserAttr mail REMOTE_USER_MAIL ", "
 
-	will retrieve all the values and store them as coma-separated
+	will retrieve all the values and store them as comma-separated
 	string. The same way as with LookupUserGroups, headers-base64
 	will first Base64 encode and then concatenate.
 
