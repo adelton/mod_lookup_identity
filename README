@@ -170,15 +170,15 @@ The default behaviour can be changed with the following directives:
 	Example: if user alice is member of groups staff and student,
 	option
 
-	    LookupUserGroupsIter REMOTE_USER_GROUPS
+	    LookupUserGroupsIter REMOTE_USER_GROUP
 
 	will set
 
-	    REMOTE_USER_GROUPS_N=2
-	    REMOTE_USER_GROUPS_1=staff
-	    REMOTE_USER_GROUPS_2=student
+	    REMOTE_USER_GROUP_N=2
+	    REMOTE_USER_GROUP_1=staff
+	    REMOTE_USER_GROUP_2=student
 
-	(or the values of REMOTE_USER_GROUPS_1 and REMOTE_USER_GROUPS_2
+	(or the values of REMOTE_USER_GROUP_1 and REMOTE_USER_GROUP_2
 	will be flipped).
 
 	When
@@ -187,13 +187,13 @@ The default behaviour can be changed with the following directives:
 
 	is specified and assuming
 
-	    LookupUserGroupsIter REMOTE-USER-GROUPS
+	    LookupUserGroupsIter REMOTE-USER-GROUP
 
 	the HTTP header values will be
 
-	    REMOTE-USER-GROUPS-N=2
-	    REMOTE-USER-GROUPS-1=c3RhZmY=
-	    REMOTE-USER-GROUPS-2=c3R1ZGVudA==
+	    REMOTE-USER-GROUP-N=2
+	    REMOTE-USER-GROUP-1=c3RhZmY=
+	    REMOTE-USER-GROUP-2=c3R1ZGVudA==
 
 	Note that the numerical <name>_N is not Base64-encoded.
 
@@ -202,18 +202,18 @@ The default behaviour can be changed with the following directives:
 
 	When the name is prefixed with '+' sign, existing values are
 	preserved and new values added to the list. Thus, if alice is
-	member of groups staff and student and REMOTE_USER_GROUPS_N
+	member of groups staff and student and REMOTE_USER_GROUP_N
 	already has value 2 set and the directive is
 
-	    LookupUserGroupsIter +REMOTE_USER_GROUPS
+	    LookupUserGroupsIter +REMOTE_USER_GROUP
 
-	the module will set values of REMOTE_USER_GROUPS_3
-	and REMOTE_USER_GROUPS_4 and will update REMOTE_USER_GROUPS_N
+	the module will set values of REMOTE_USER_GROUP_3
+	and REMOTE_USER_GROUP_4 and will update REMOTE_USER_GROUP_N
 	to value 4. The module will however not check/fix the consistency
-	of existing values; if REMOTE_USER_GROUPS_N is set to value 2
+	of existing values; if REMOTE_USER_GROUP_N is set to value 2
 	prior to invocation of mod_lookup_identity, it will not check
-	if REMOTE_USER_GROUPS_1 and REMOTE_USER_GROUPS_2 are set to match
-	REMOTE_USER_GROUPS_N.
+	if REMOTE_USER_GROUP_1 and REMOTE_USER_GROUP_2 are set to match
+	REMOTE_USER_GROUP_N.
 
 	By default, groups are not retrieved.
 
@@ -299,15 +299,15 @@ LookupUserAttr and LookupUserAttrIter for single attribute can be
 configured with the same note/environment variable name. For example,
 
     LookupUserGroups REMOTE_USER_GROUPS :
-    LookupUserGroupsIter REMOTE_USER_GROUPS
+    LookupUserGroupsIter REMOTE_USER_GROUP
 
 can be set at the same time and for user with two groups, all the
 following values will be set:
 
     REMOTE_USER_GROUPS=staff:student
-    REMOTE_USER_GROUPS_N=2
-    REMOTE_USER_GROUPS_1=staff
-    REMOTE_USER_GROUPS_2=student
+    REMOTE_USER_GROUP_N=2
+    REMOTE_USER_GROUP_1=staff
+    REMOTE_USER_GROUP_2=student
 
 Building from sources
 ---------------------
