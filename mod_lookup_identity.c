@@ -112,10 +112,10 @@ static int lookup_user_by_certificate(request_rec * r) {
 		goto fail;
 	}
 
-        int timeout = DBUS_SSSD_TIMEOUT;
-        if (cfg->dbus_timeout > 0) {
-                timeout = cfg->dbus_timeout;
-        }
+	int timeout = DBUS_SSSD_TIMEOUT;
+	if (cfg->dbus_timeout > 0) {
+		timeout = cfg->dbus_timeout;
+	}
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 		message, timeout, &error);
@@ -745,10 +745,10 @@ static const command_rec directives[] = {
 
 static void register_hooks(apr_pool_t * pool) {
 #ifndef NO_USER_ATTR
-        static const char * const access_succ[] = {"mod_authz_core.c", NULL};
-        static const char * const access_pred[] = {"mod_ssl.c", NULL};
-        ap_hook_check_access(lookup_user_by_certificate, access_pred, access_succ, APR_HOOK_MIDDLE,
-                                        AP_AUTH_INTERNAL_PER_CONF);
+	static const char * const access_succ[] = {"mod_authz_core.c", NULL};
+	static const char * const access_pred[] = {"mod_ssl.c", NULL};
+	ap_hook_check_access(lookup_user_by_certificate, access_pred, access_succ, APR_HOOK_MIDDLE,
+					AP_AUTH_INTERNAL_PER_CONF);
 #endif
 
 	static const char * const fixup_succ[] = {"mod_headers.c", NULL};
