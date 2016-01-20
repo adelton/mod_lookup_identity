@@ -81,6 +81,8 @@ The default behaviour can be changed with the following directives:
 	    Notes: Sets the Apache notes table only
 	    Env: Sets environment variables only
 	    Headers: Sets HTTP request headers, for use by proxy setups.
+	    Headers-Base64: Sets HTTP request headers with values
+		Base64-encoded, for use by proxy setups.
 
 	The default is Notes and Env.
 
@@ -121,6 +123,17 @@ The default behaviour can be changed with the following directives:
 
 	the value will be either staff or student (the first in the list
 	returned by the sssd dbus call; order not to be relied on).
+
+	When
+
+	    LookupOutput headers-base64
+
+	is specified, the values are encoded individually and then
+	concatenated. For the staff and student values example,
+
+	    LookupUserGroups REMOTE-USER-GROUPS :
+
+	will produce c3RhZmY=:c3R1ZGVudA==.
 
 	When prefixed with '+' sign and the note/environment variable
 	already has some value set, behaviour differs depending on
@@ -168,6 +181,22 @@ The default behaviour can be changed with the following directives:
 	(or the values of REMOTE_USER_GROUPS_1 and REMOTE_USER_GROUPS_2
 	will be flipped).
 
+	When
+
+	    LookupOutput headers-base64
+
+	is specified and assuming
+
+	    LookupUserGroupsIter REMOTE-USER-GROUPS
+
+	the HTTP header values will be
+
+	    REMOTE-USER-GROUPS-N=2
+	    REMOTE-USER-GROUPS-1=c3RhZmY=
+	    REMOTE-USER-GROUPS-2=c3R1ZGVudA==
+
+	Note that the numerical <name>_N is not Base64-encoded.
+
 	If user is not a member of any group, the <name>_N value will
 	be set to 0.
 
@@ -213,7 +242,8 @@ The default behaviour can be changed with the following directives:
 	    LookupUserAttr mail REMOTE_USER_MAIL ", "
 
 	will retrieve all the values and store them as coma-separated
-	string.
+	string. The same way as with LookupUserGroups, headers-base64
+	will first Base64 encode and then concatenate.
 
 	When the name is prefixed with '+' sign, similar to LookupUserGroups
 	it will only set the value if not set yet, or append to existing
@@ -301,7 +331,7 @@ in and will not be available.
 License
 -------
 
-Copyright 2013--2015 Jan Pazdziora
+Copyright 2013--2016 Jan Pazdziora
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

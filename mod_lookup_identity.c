@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2013--2015 Jan Pazdziora
+ * Copyright 2013--2016 Jan Pazdziora
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@ static const int LOOKUP_IDENTITY_OUTPUT_NONE = 128;
 static const int LOOKUP_IDENTITY_OUTPUT_NOTES = 1;
 static const int LOOKUP_IDENTITY_OUTPUT_ENV = 2;
 static const int LOOKUP_IDENTITY_OUTPUT_HEADERS = 4;
+static const int LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64 = 8;
 
 static char * LOOKUP_IDENTITY_OUTPUT_GECOS = "REMOTE_USER_GECOS";
 
@@ -304,6 +305,17 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 }
 #endif
 
+static apr_array_header_t * base64_encode_array(apr_pool_t * p, const apr_array_header_t * values) {
+	if (! values)
+		return NULL;
+	apr_array_header_t * base64_values = apr_array_make(p, values->nelts, sizeof(char *));
+	for (int i = 0; i < values->nelts; i++) {
+		*(char **)apr_array_push(base64_values) = ap_pbase64encode(p, ((char **)values->elts)[i]);
+	}
+	ap_assert(values->nelts == base64_values->nelts);
+	return base64_values;
+}
+
 static void lookup_identity_output_iter_to(request_rec * r, apr_table_t * t, const char * key, const char * sep, const apr_array_header_t * values) {
 	int append = 0;
 	if (key[0] == '+') {
@@ -330,7 +342,9 @@ static void lookup_identity_output_iter(request_rec * r, int the_output, const c
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
 		lookup_identity_output_iter_to(r, r->subprocess_env, key, "_", values);
 	}
-	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64) {
+		lookup_identity_output_iter_to(r, r->headers_in, key, "-", base64_encode_array(r->pool, values));
+	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
 		lookup_identity_output_iter_to(r, r->headers_in, key, "-", values);
 	}
 }
@@ -369,7 +383,9 @@ static void lookup_identity_output_data(request_rec * r, int the_output, const c
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
 		lookup_identity_output_data_to(r, r->subprocess_env, key, values, sep);
 	}
-	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64) {
+		lookup_identity_output_data_to(r, r->headers_in, key, base64_encode_array(r->pool, values), sep);
+	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
 		lookup_identity_output_data_to(r, r->headers_in, key, values, sep);
 	}
 }
@@ -584,6 +600,8 @@ static const char * set_output(cmd_parms * cmd, void * conf_void, const char * a
 			cfg->output |= LOOKUP_IDENTITY_OUTPUT_ENV;
 		} else if (!strcasecmp(arg, "notes")) {
 			cfg->output |= LOOKUP_IDENTITY_OUTPUT_NOTES;
+		} else if (!strcasecmp(arg, "headers-base64")) {
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64;
 		} else if (!strcasecmp(arg, "headers")) {
 			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS;
 		}
