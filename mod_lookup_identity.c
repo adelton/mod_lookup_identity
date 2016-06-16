@@ -746,7 +746,7 @@ static const command_rec directives[] = {
 static void register_hooks(apr_pool_t * pool) {
 #ifndef NO_USER_ATTR
 	static const char * const access_succ[] = {"mod_authz_core.c", NULL};
-	static const char * const access_pred[] = {"mod_ssl.c", NULL};
+	static const char * const access_pred[] = {"mod_ssl.c", "mod_nss.c", NULL};
 #ifdef AP_AUTH_INTERNAL_PER_CONF
 	ap_hook_check_access(lookup_user_by_certificate, access_pred, access_succ, APR_HOOK_MIDDLE,
 					AP_AUTH_INTERNAL_PER_CONF);
