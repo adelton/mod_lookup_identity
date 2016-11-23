@@ -81,7 +81,7 @@ static int lookup_user_by_certificate(request_rec * r) {
 	if (cfg->lookup_by_certificate < 1 || ! r->user) {
 		return DECLINED;
 	}
-	ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server, "lookup_user_by_certificate invoked [%s]", r->user);
+	ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "lookup_user_by_certificate invoked [%s]", r->user);
 
 	static char * stage = NULL;
 	DBusError error;
@@ -135,7 +135,7 @@ static int lookup_user_by_certificate(request_rec * r) {
 		goto fail;
 	}
 
-	ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server, "lookup_user_by_certificate got object [%s]", path);
+	ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "lookup_user_by_certificate got object [%s]", path);
 
 	dbus_message_unref(message);
 	message = dbus_message_new_method_call(DBUS_SSSD_DEST,
@@ -189,7 +189,7 @@ static int lookup_user_by_certificate(request_rec * r) {
 		char * r_data;
 		dbus_message_iter_get_basic(&variter, &r_data);
 		r->user = apr_pstrdup(r->pool, r_data);
-		ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, r->server, "lookup_user_by_certificate found [%s]", r->user);
+		ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, r, "lookup_user_by_certificate found [%s]", r->user);
 	}
 	if (dbus_message_iter_next(&variter) || dbus_message_iter_next(&iter)) {
 		stage = DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ": result is not unique";
@@ -200,15 +200,15 @@ static int lookup_user_by_certificate(request_rec * r) {
 
 fail:
 	if (dbus_error_is_set(&error)) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "lookup_user_by_certificate failed [%s]: [%s]", stage, error.message);
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "lookup_user_by_certificate failed [%s]: [%s]", stage, error.message);
 	} else if (stage) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "lookup_user_by_certificate failed [%s]", stage);
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "lookup_user_by_certificate failed [%s]", stage);
 	}
 	r->user = NULL;
 
 pass:
 	if (! r->user) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "lookup_user_by_certificate cleared r->user");
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "lookup_user_by_certificate cleared r->user");
 	}
 	if (reply) {
 		dbus_message_unref(reply);
@@ -227,7 +227,7 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 		DBUS_SSSD_IFACE,
 		method);
 	if (! message) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error allocating dbus message");
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Error allocating dbus message");
 		return NULL;
 	}
 	dbus_message_set_auto_start(message, TRUE);
@@ -287,13 +287,13 @@ static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnectio
 			args_string[total_args_length] = '\0';
 		}
 		if (dbus_error_is_set(error)) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"Error dbus calling %s(%s%s): %s: %s", method, user, args_string, error->name, error->message);
 		} else if (reply_type == DBUS_MESSAGE_TYPE_ERROR) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"Error %s dbus calling %s(%s%s)", dbus_message_get_error_name(reply), method, user, args_string);
 		} else {
-			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"Error unexpected reply type %d dbus calling %s(%s%s)", reply_type, method, user, args_string);
 		}
 		if (reply) {
@@ -421,7 +421,7 @@ static int lookup_identity_hook(request_rec * r) {
 		return DECLINED;
 	}
 
-	ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server, "invoked for user %s", r->user);
+	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "invoked for user %s", r->user);
 
 	struct passwd * pwd = getpwnam(r->user);
 	if (! pwd) {
@@ -446,7 +446,7 @@ static int lookup_identity_hook(request_rec * r) {
 		dbus_error_init(&error);
 		DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
 		if (! connection) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+			ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 				"Error connecting to system dbus: %s", error.message);
 		} else {
 			dbus_connection_set_exit_on_disconnect(connection, FALSE);
@@ -461,7 +461,7 @@ static int lookup_identity_hook(request_rec * r) {
 						values = apr_array_make(r->pool, num, sizeof(char *));
 					}
 					for (i = 0; i < num; i++) {
-						ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server,
+						ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r,
 							"dbus call %s returned group %s", DBUS_SSSD_GET_USER_GROUPS_METHOD, ptr[i]);
 						*(char **)apr_array_push(values) = ptr[i];
 					}
@@ -496,7 +496,7 @@ static int lookup_identity_hook(request_rec * r) {
 						do {
 							type = dbus_message_iter_get_arg_type(&iter);
 							if (type != DBUS_TYPE_DICT_ENTRY) {
-								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+								ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 									"dbus call %s returned value %d instead of DBUS_TYPE_DICT_ENTRY",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, type);
 								continue;
@@ -507,7 +507,7 @@ static int lookup_identity_hook(request_rec * r) {
 							dbus_message_iter_get_basic(&dictiter, &attr_name);
 							char * out_name = apr_hash_get(the_config->output_user_attr, attr_name, APR_HASH_KEY_STRING);
 							if (!out_name) {
-								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+								ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 									"dbus call %s returned key %s that we did not ask for",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
@@ -516,12 +516,12 @@ static int lookup_identity_hook(request_rec * r) {
 								apr_hash_set(seen, attr_name, APR_HASH_KEY_STRING, "");
 							}
 							if (! dbus_message_iter_next(&dictiter)) {
-								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+								ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 									"dbus call %s returned key %s with no value", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 							}
 							type = dbus_message_iter_get_arg_type(&dictiter);
 							if (type != DBUS_TYPE_VARIANT) {
-								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+								ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 									"dbus call %s returned key %s which does not have DBUS_TYPE_VARIANT as value",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
@@ -529,7 +529,7 @@ static int lookup_identity_hook(request_rec * r) {
 							dbus_message_iter_recurse(&dictiter, &dictiter);
 							type = dbus_message_iter_get_arg_type(&dictiter);
 							if (type != DBUS_TYPE_ARRAY) {
-								ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+								ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
 									"dbus call %s returned key %s which does not have DBUS_TYPE_VARIANT DBUS_TYPE_ARRAY as value",
 									DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name);
 								continue;
@@ -546,7 +546,7 @@ static int lookup_identity_hook(request_rec * r) {
 							do {
 								char * r_data;
 								dbus_message_iter_get_basic(&dictiter, &r_data);
-								ap_log_error(APLOG_MARK, APLOG_INFO, 0, r->server,
+								ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r,
 									"dbus call %s returned attr %s=%s", DBUS_SSSD_GET_USER_ATTR_METHOD, attr_name, r_data);
 								if (! values) {
 									values = apr_array_make(r->pool, 1, sizeof(char *));
