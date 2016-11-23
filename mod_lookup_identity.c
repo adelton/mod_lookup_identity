@@ -760,7 +760,12 @@ static void register_hooks(apr_pool_t * pool) {
 	APR_REGISTER_OPTIONAL_FN(lookup_identity_hook);
 }
 
-module AP_MODULE_DECLARE_DATA lookup_identity_module = {
+#ifdef AP_DECLARE_MODULE
+AP_DECLARE_MODULE(lookup_identity)
+#else
+module AP_MODULE_DECLARE_DATA lookup_identity_module
+#endif
+	= {
 	STANDARD20_MODULE_STUFF,
 	create_dir_conf,		/* Per-directory configuration handler */
 	merge_dir_conf,			/* Merge handler for per-directory configurations */
