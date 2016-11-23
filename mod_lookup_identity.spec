@@ -7,7 +7,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user
 Name: mod_lookup_identity
-Version: 0.9.7
+Version: 0.9.8
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -62,6 +62,10 @@ install -Dp -m 0644 lookup_identity.confx $RPM_BUILD_ROOT%{_httpd_confdir}/looku
 %{_httpd_moddir}/*.so
 
 %changelog
+* Wed Nov 23 2016 Jan Pazdziora <jpazdziora@redhat.com> - 0.9.8-1
+- Logging improvements; lookup_user_by_certificate logging moved from
+  notice to info level.
+
 * Thu Jun 16 2016 Jan Pazdziora <jpazdziora@redhat.com> - 0.9.7-1
 - Ensure lookup_user_by_certificate runs after mod_nss as well.
 
