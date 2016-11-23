@@ -189,7 +189,7 @@ static int lookup_user_by_certificate(request_rec * r) {
 		char * r_data;
 		dbus_message_iter_get_basic(&variter, &r_data);
 		r->user = apr_pstrdup(r->pool, r_data);
-		ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, r, "lookup_user_by_certificate found [%s]", r->user);
+		ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "lookup_user_by_certificate found [%s]", r->user);
 	}
 	if (dbus_message_iter_next(&variter) || dbus_message_iter_next(&iter)) {
 		stage = DBUS_PROPERTIES "." DBUS_PROPERTIES_GET ": result is not unique";
