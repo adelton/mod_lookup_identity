@@ -27,6 +27,7 @@
 #include "http_log.h"
 #include "http_protocol.h"
 #include "http_request.h"
+#include "util_script.h"
 #include <pwd.h>
 #include <grp.h>
 
@@ -38,7 +39,11 @@
 #define DBUS_SSSD_IFACE_USERS "org.freedesktop.sssd.infopipe.Users"
 #define DBUS_SSSD_GET_USER_GROUPS_METHOD "GetUserGroups"
 #define DBUS_SSSD_GET_USER_ATTR_METHOD "GetUserAttr"
+#ifndef NO_CERTIFICATE_MAPPING_SUPPORT
+#define DBUS_SSSD_FIND_BY_CERTIFICATE "FindByNameAndCertificate"
+#else
 #define DBUS_SSSD_FIND_BY_CERTIFICATE "FindByCertificate"
+#endif
 #define DBUS_SSSD_DEST "org.freedesktop.sssd.infopipe"
 #define DBUS_SSSD_TIMEOUT 5000
 #define DBUS_PROPERTIES "org.freedesktop.DBus.Properties"
@@ -61,6 +66,9 @@ typedef struct lookup_identity_config {
 	char * context;
 	int output;
 	char * output_gecos;
+#ifndef NO_CERTIFICATE_MAPPING_SUPPORT
+	char * arg_name;
+#endif
 #ifndef NO_USER_ATTR
 	char * output_groups;
 	char * output_groups_sep;
@@ -88,6 +96,18 @@ static int lookup_user_by_certificate(request_rec * r) {
 	dbus_error_init(&error);
 	DBusMessage * message = NULL;
 	DBusMessage * reply = NULL;
+#ifndef NO_CERTIFICATE_MAPPING_SUPPORT
+	const char * username = "";
+	apr_table_t * arg_table = NULL;
+
+	if (cfg->arg_name) {
+		ap_args_to_table(r, &arg_table);
+        username = apr_table_get(arg_table, cfg->arg_name);
+		if (username == NULL) {
+			username = "";
+		}
+	}
+#endif
 
 	DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
 	if (! connection) {
@@ -106,6 +126,9 @@ static int lookup_user_by_certificate(request_rec * r) {
 	}
 	dbus_message_set_auto_start(message, TRUE);
 	if (! dbus_message_append_args(message,
+#ifndef NO_CERTIFICATE_MAPPING_SUPPORT
+		DBUS_TYPE_STRING, &username,
+#endif
 		DBUS_TYPE_STRING, &(r->user),
 		DBUS_TYPE_INVALID)) {
 		stage = apr_psprintf(r->pool, "dbus_message_append_args(%s)", r->user);
@@ -692,6 +715,9 @@ static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_voi
 	lookup_identity_config * cfg = (lookup_identity_config *) create_dir_conf(pool, add->context);
 	cfg->output = (add->output == LOOKUP_IDENTITY_OUTPUT_DEFAULT) ? base->output : add->output;
 	cfg->output_gecos = add->output_gecos ? add->output_gecos : base->output_gecos;
+#ifndef NO_CERTIFICATE_MAPPING_SUPPORT
+	cfg->arg_name = add->arg_name ? add->arg_name : base->arg_name;
+#endif
 #ifndef NO_USER_ATTR
 	cfg->output_groups = add->output_groups ? add->output_groups : base->output_groups;
 	cfg->output_groups_sep = add->output_groups_sep ? add->output_groups_sep : base->output_groups_sep;
@@ -732,6 +758,9 @@ static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_voi
 static const command_rec directives[] = {
 	AP_INIT_TAKE1("LookupOutput", set_output, NULL, RSRC_CONF | ACCESS_CONF, "Specify where the lookup results should be stored (notes, variables, headers)"),
 	AP_INIT_TAKE1("LookupUserGECOS", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, output_gecos), RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the GECOS information"),
+#ifndef NO_CERTIFICATE_MAPPING_SUPPORT
+	AP_INIT_TAKE1("LookupUserByCertificateParamName", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, arg_name), RSRC_CONF | ACCESS_CONF, "Name of the argument/variable in query string used to pass username"),
+#endif
 #ifndef NO_USER_ATTR
 	AP_INIT_TAKE12("LookupUserGroups", set_output_groups, NULL, RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the group information"),
 	AP_INIT_TAKE1("LookupUserGroupsIter", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, output_groups_iter), RSRC_CONF | ACCESS_CONF, "Name of the notes/variables for the group information"),

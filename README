@@ -5,9 +5,17 @@ Apache module mod_lookup_identity
 Apache module to lookup user identifier and retrieve additional
 information about the authenticated user.
 
-The module supports lookup of the user identifier based on certificate
-via SSSD D-Bus call org.freedesktop.sssd.infopipe.Users.FindByCertificate,
-setting up the r->user request structure.
+The module supports lookup of the user identifier based on
+certificate via SSSD D-Bus call, setting up the r->user request
+structure.
+Method org.freedesktop.sssd.infopipe.Users.FindByNameAndCertificate
+is used by default and value of query string parameter configured
+with directive LookupCertmapHintParam is passed to SSSD together with
+certificate to allow mapping of single certificate to multiple user
+accounts.
+Setting NO_CERTIFICATE_MAPPING_SUPPORT at build time changes the
+module so it does not check the query string and calls SSSD D-Bus
+method org.freedesktop.sssd.infopipe.Users.FindByCertificate.
 
 It also allows retrieval of list of group names the user belongs to
 using org.freedesktop.sssd.infopipe.GetUserGroups call and any
@@ -293,6 +301,15 @@ The default behaviour can be changed with the following directives:
     LookupDbusTimeout miliseconds
 
 	Default: 5000 (== 5 s).
+
+    LookupUserByCertificateParamName
+
+    Name of parameter for HTTP request's query string. The value from
+    query string (if there is any) is then sent to SSSD together with
+    the certificate. This is useful when single certificate is
+    assigned to multiple user accounts.
+
+    By default, no parameter is parsed from query string.
 
 Please note that LookupUserGroups and LookupUserGroupsIter, as well as
 LookupUserAttr and LookupUserAttrIter for single attribute can be
