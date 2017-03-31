@@ -60,8 +60,6 @@ static const int LOOKUP_IDENTITY_OUTPUT_ENV = 2;
 static const int LOOKUP_IDENTITY_OUTPUT_HEADERS = 4;
 static const int LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64 = 8;
 
-static char * LOOKUP_IDENTITY_OUTPUT_GECOS = "REMOTE_USER_GECOS";
-
 typedef struct lookup_identity_config {
 	char * context;
 	int output;
@@ -446,12 +444,12 @@ static int lookup_identity_hook(request_rec * r) {
 
 	ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "invoked for user %s", r->user);
 
-	struct passwd * pwd = getpwnam(r->user);
-	if (! pwd) {
-		return DECLINED;
-	}
-
 	if (the_config->output_gecos) {
+		struct passwd * pwd = getpwnam(r->user);
+		if (! pwd) {
+			return DECLINED;
+		}
+
 		apr_array_header_t * gecos_array = apr_array_make(r->pool, 1, sizeof(char *));
 		*(char **)apr_array_push(gecos_array) = pwd->pw_gecos;
 		lookup_identity_output_data(r, the_output,
@@ -685,7 +683,7 @@ static lookup_identity_config * create_common_conf(apr_pool_t * pool) {
 	lookup_identity_config * cfg = apr_pcalloc(pool, sizeof(lookup_identity_config));
 	if (cfg) {
 		cfg->output = LOOKUP_IDENTITY_OUTPUT_DEFAULT;
-		cfg->output_gecos = LOOKUP_IDENTITY_OUTPUT_GECOS;
+		cfg->output_gecos = NULL;
 #ifndef NO_USER_ATTR
 		cfg->lookup_by_certificate = -1;
 #endif
