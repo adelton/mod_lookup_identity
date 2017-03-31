@@ -20,7 +20,7 @@ method org.freedesktop.sssd.infopipe.Users.FindByCertificate.
 It also allows retrieval of list of group names the user belongs to
 using org.freedesktop.sssd.infopipe.GetUserGroups call and any
 custom attributes configured in /etc/sssd/sssd.conf using with
-org.freedesktop.sssd.infopipe.GetUserAttr call. It also retrieves
+org.freedesktop.sssd.infopipe.GetUserAttr call. It can also retrieve
 the GECOS information using the getpwnam call. The retrieved values
 get stored in notes/environment variables.
 
@@ -101,11 +101,14 @@ The default behaviour can be changed with the following directives:
 	note/environment variable is not set yet, otherwise the
 	value is overwritten.
 
+	Setting this option requires for the user identity to be
+	POSIX identity, retrievable with getpwnam.
+
 	Example: LookupUserGECOS REMOTE_USER_FULLNAME
 
 	Example: LookupUserGECOS +REMOTE_USER_GECOS
 
-	Default is REMOTE_USER_GECOS.
+	Default is not set.
 
     LookupUserGroups name [separator]
 
@@ -348,7 +351,7 @@ in and will not be available.
 License
 -------
 
-Copyright 2013--2016 Jan Pazdziora
+Copyright 2013--2017 Jan Pazdziora
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
