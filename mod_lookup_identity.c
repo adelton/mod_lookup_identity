@@ -100,7 +100,7 @@ static int lookup_user_by_certificate(request_rec * r) {
 
 	if (cfg->arg_name) {
 		ap_args_to_table(r, &arg_table);
-        username = apr_table_get(arg_table, cfg->arg_name);
+		username = apr_table_get(arg_table, cfg->arg_name);
 		if (username == NULL) {
 			username = "";
 		}
