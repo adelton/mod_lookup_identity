@@ -10,9 +10,9 @@ certificate via SSSD D-Bus call, setting up the r->user request
 structure.
 Method org.freedesktop.sssd.infopipe.Users.FindByNameAndCertificate
 is used by default and value of query string parameter configured
-with directive LookupCertmapHintParam is passed to SSSD together with
-certificate to allow mapping of single certificate to multiple user
-accounts.
+with directive LookupUserByCertificateParamName is passed to SSSD
+together with certificate to allow mapping of single certificate to
+multiple user accounts.
 Setting NO_CERTIFICATE_MAPPING_SUPPORT at build time changes the
 module so it does not check the query string and calls SSSD D-Bus
 method org.freedesktop.sssd.infopipe.Users.FindByCertificate.
