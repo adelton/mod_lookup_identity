@@ -7,7 +7,7 @@
 
 Summary: Apache module to retrieve additional information about the authenticated user
 Name: mod_lookup_identity
-Version: 0.9.9
+Version: 1.0.0
 Release: 1%{?dist}
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -62,6 +62,10 @@ install -Dp -m 0644 lookup_identity.confx $RPM_BUILD_ROOT%{_httpd_confdir}/looku
 %{_httpd_moddir}/*.so
 
 %changelog
+* Tue Apr 04 2017 Jan Pazdziora <jpazdziora@redhat.com> - 1.0.0-1
+- Make LookupUserGECOS optional (no default) to support non-POSIX
+  user identities.
+
 * Wed Mar 22 2017 Jan Pazdziora <jpazdziora@redhat.com> - 0.9.9-1
 - Add support for multiple users mapped to single certificate.
 
