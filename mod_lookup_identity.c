@@ -59,6 +59,8 @@ static const int LOOKUP_IDENTITY_OUTPUT_NOTES = 1;
 static const int LOOKUP_IDENTITY_OUTPUT_ENV = 2;
 static const int LOOKUP_IDENTITY_OUTPUT_HEADERS = 4;
 static const int LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64 = 8;
+static const int LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI = 16;
+static const int LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI_BASE64 = 32;
 
 typedef struct lookup_identity_config {
 	char * context;
@@ -363,9 +365,9 @@ static void lookup_identity_output_iter(request_rec * r, int the_output, const c
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
 		lookup_identity_output_iter_to(r, r->subprocess_env, key, "_", values);
 	}
-	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64) {
+	if (the_output & (LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64 | LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI_BASE64)) {
 		lookup_identity_output_iter_to(r, r->headers_in, key, "-", base64_encode_array(r->pool, values));
-	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
+	} else if (the_output & (LOOKUP_IDENTITY_OUTPUT_HEADERS | LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI)) {
 		lookup_identity_output_iter_to(r, r->headers_in, key, "-", values);
 	}
 }
@@ -397,6 +399,21 @@ static void lookup_identity_output_data_to(request_rec * r, apr_table_t * t, con
 	}
 	apr_table_setn(t, key, out_value);
 }
+static void lookup_identity_output_data_to_multi(request_rec * r, apr_table_t * t, const char * key, const apr_array_header_t * values) {
+	int append = 0;
+	if (key[0] == '+') {
+		key++;
+		append = 1;
+	}
+	for (int i = 0; values && i < values->nelts; i++) {
+		if (append) {
+			apr_table_add(t, key, ((char **)values->elts)[i]);
+		} else {
+			apr_table_set(t, key, ((char **)values->elts)[i]);
+		}
+		append = 1;
+	}
+}
 static void lookup_identity_output_data(request_rec * r, int the_output, const char * key, const apr_array_header_t * values, const char * sep) {
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_NOTES) {
 		lookup_identity_output_data_to(r, r->notes, key, values, sep);
@@ -404,7 +421,11 @@ static void lookup_identity_output_data(request_rec * r, int the_output, const c
 	if (the_output & LOOKUP_IDENTITY_OUTPUT_ENV) {
 		lookup_identity_output_data_to(r, r->subprocess_env, key, values, sep);
 	}
-	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64) {
+	if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI_BASE64) {
+		lookup_identity_output_data_to_multi(r, r->headers_in, key, base64_encode_array(r->pool, values));
+	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI) {
+		lookup_identity_output_data_to_multi(r, r->headers_in, key, values);
+	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64) {
 		lookup_identity_output_data_to(r, r->headers_in, key, base64_encode_array(r->pool, values), sep);
 	} else if (the_output & LOOKUP_IDENTITY_OUTPUT_HEADERS) {
 		lookup_identity_output_data_to(r, r->headers_in, key, values, sep);
@@ -625,6 +646,10 @@ static const char * set_output(cmd_parms * cmd, void * conf_void, const char * a
 			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS_BASE64;
 		} else if (!strcasecmp(arg, "headers")) {
 			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS;
+		} else if (!strcasecmp(arg, "headers-multi")) {
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI;
+		} else if (!strcasecmp(arg, "headers-multi-base64")) {
+			cfg->output |= LOOKUP_IDENTITY_OUTPUT_HEADERS_MULTI_BASE64;
 		}
 	}
 	return NULL;

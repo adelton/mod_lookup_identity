@@ -92,6 +92,16 @@ The default behaviour can be changed with the following directives:
 	    Headers-Base64: Sets HTTP request headers with values
 		Base64-encoded, for use by proxy setups.
 
+        The options above will concatenate the values with separator,
+	or just store the first value if separator is not provided.
+	The two options below will store multiple values for the same
+	key, except for LookupUserGroupsIter and LookupUserAttrIter
+	for which they will behave as their non-Multi counterparts:
+
+	    Headers-Multi: Sets HTTP request headers, for use by proxy setups.
+	    Headers-Multi-Base64: As Headers-Multi but values are
+		Base64-encoded.
+
 	The default is Notes and Env.
 
     LookupUserGECOS name
