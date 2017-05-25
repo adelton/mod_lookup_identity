@@ -21,6 +21,7 @@
 #include "ap_provider.h"
 #include "apr_strings.h"
 #include "apr_optional.h"
+#include "apr_escape.h"
 #include "httpd.h"
 #include "http_core.h"
 #include "http_config.h"
@@ -39,6 +40,8 @@
 #define DBUS_SSSD_IFACE_USERS "org.freedesktop.sssd.infopipe.Users"
 #define DBUS_SSSD_GET_USER_GROUPS_METHOD "GetUserGroups"
 #define DBUS_SSSD_GET_USER_ATTR_METHOD "GetUserAttr"
+#define DBUS_SSSD_FIND_BY_NAME "Users.FindByName"
+#define DBUS_SSSD_USER_OBJECT_PATH "/org/freedesktop/sssd/infopipe/Users/"
 #ifndef NO_CERTIFICATE_MAPPING_SUPPORT
 #define DBUS_SSSD_FIND_BY_CERTIFICATE "FindByNameAndCertificate"
 #else
@@ -68,6 +71,7 @@ typedef struct lookup_identity_config {
 	char * arg_name;
 #endif
 #ifndef NO_USER_ATTR
+	char * output_domain;
 	char * output_groups;
 	char * output_groups_sep;
 	char * output_groups_iter;
@@ -243,10 +247,20 @@ pass:
 }
 
 static DBusMessage * lookup_identity_dbus_message(request_rec * r, DBusConnection * connection, DBusError * error, int timeout, const char * method, apr_hash_t * hash) {
+	const char *path = DBUS_SSSD_PATH;
+	const char *iface = DBUS_SSSD_IFACE;
+	const char *m = strrchr(method, '.');
+	if (m) {
+		path = apr_psprintf(r->pool, "%s/%.*s", DBUS_SSSD_PATH, (int)(m - method), method);
+		iface = apr_psprintf(r->pool, "%s.%.*s", DBUS_SSSD_IFACE, (int)(m - method), method);
+		m++;
+	} else {
+		m = method;
+	}
 	DBusMessage * message = dbus_message_new_method_call(DBUS_SSSD_DEST,
-		DBUS_SSSD_PATH,
-		DBUS_SSSD_IFACE,
-		method);
+		path,
+		iface,
+		m);
 	if (! message) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Error allocating dbus message");
 		return NULL;
@@ -462,7 +476,7 @@ static int lookup_identity_hook(request_rec * r) {
 		the_timeout = the_config->dbus_timeout;
 	}
 
-	if (the_config->output_groups || the_config->output_groups_iter || the_config->output_user_attr) {
+	if (the_config->output_domain || the_config->output_groups || the_config->output_groups_iter || the_config->output_user_attr) {
 		DBusError error;
 		dbus_error_init(&error);
 		DBusConnection * connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
@@ -471,6 +485,63 @@ static int lookup_identity_hook(request_rec * r) {
 				"Error connecting to system dbus: %s", error.message);
 		} else {
 			dbus_connection_set_exit_on_disconnect(connection, FALSE);
+			if (the_config->output_domain) {
+				DBusMessage * reply = lookup_identity_dbus_message(r, connection, &error, the_timeout, DBUS_SSSD_FIND_BY_NAME, NULL);
+				char *path = NULL;
+				int domain_offset = strlen(DBUS_SSSD_USER_OBJECT_PATH);
+				if (reply) {
+					if (! dbus_message_get_args(reply, NULL, DBUS_TYPE_OBJECT_PATH, &path, DBUS_TYPE_INVALID)) {
+						ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+							"dbus call %s: return arg not DBUS_TYPE_OBJECT", DBUS_SSSD_FIND_BY_NAME);
+					} else {
+						ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "%s(%s) lookup_user_by_certificate got object [%s]",
+							DBUS_SSSD_FIND_BY_NAME, r->user, path);
+						if (strncmp(path, DBUS_SSSD_USER_OBJECT_PATH, domain_offset)) {
+							ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "the object [%s] was not expected", path);
+							path = NULL;
+						}
+					}
+				}
+				if (reply) {
+					dbus_message_unref(reply);
+				}
+				if (dbus_error_is_set(&error)) {
+					dbus_error_free(&error);
+				}
+				if (path) {
+					char *p = path + domain_offset;
+					char *o = p;
+					while (*p && *p != '/') {
+						if (*p == '_') {
+							p++;
+							if (!(*p && *(p + 1))) {
+								break;
+							}
+							apr_size_t l;
+							if (apr_unescape_hex(o, p, 2, 0, &l) != APR_SUCCESS) {
+								ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "failed to decode hex escapes");
+								path = NULL;
+								break;
+							}
+							o += l;
+							p++;
+						} else {
+							if (o != p) {
+								*o = *p;
+							}
+							o++;
+						}
+						p++;
+					}
+					*o = '\0';
+				}
+				if (path) {
+					apr_array_header_t * values = apr_array_make(r->pool, 1, sizeof(char *));
+					*(char **)apr_array_push(values) = path + domain_offset;
+					ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "extracted domain [%s] from the object path", path + domain_offset);
+					lookup_identity_output_data(r, the_output, the_config->output_domain, values, NULL);
+				}
+			}
 			if (the_config->output_groups || the_config->output_groups_iter) {
 				DBusMessage * reply = lookup_identity_dbus_message(r, connection, &error, the_timeout, DBUS_SSSD_GET_USER_GROUPS_METHOD, NULL);
 				int num;
@@ -717,6 +788,7 @@ static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_voi
 	cfg->arg_name = add->arg_name ? add->arg_name : base->arg_name;
 #endif
 #ifndef NO_USER_ATTR
+	cfg->output_domain = add->output_domain ? add->output_domain : base->output_domain;
 	cfg->output_groups = add->output_groups ? add->output_groups : base->output_groups;
 	cfg->output_groups_sep = add->output_groups_sep ? add->output_groups_sep : base->output_groups_sep;
 	cfg->output_groups_iter = add->output_groups_iter ? add->output_groups_iter : base->output_groups_iter;
@@ -756,6 +828,7 @@ static void * merge_dir_conf(apr_pool_t * pool, void * base_void, void * add_voi
 static const command_rec directives[] = {
 	AP_INIT_TAKE1("LookupOutput", set_output, NULL, RSRC_CONF | ACCESS_CONF, "Specify where the lookup results should be stored (notes, variables, headers)"),
 	AP_INIT_TAKE1("LookupUserGECOS", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, output_gecos), RSRC_CONF | ACCESS_CONF, "Name of the note/variable for the GECOS information"),
+	AP_INIT_TAKE1("LookupUserDomain", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, output_domain), RSRC_CONF | ACCESS_CONF, "Name of the SSSD domain where the user is found"),
 #ifndef NO_CERTIFICATE_MAPPING_SUPPORT
 	AP_INIT_TAKE1("LookupUserByCertificateParamName", ap_set_string_slot, (void*)APR_OFFSETOF(lookup_identity_config, arg_name), RSRC_CONF | ACCESS_CONF, "Name of the argument/variable in query string used to pass username"),
 #endif

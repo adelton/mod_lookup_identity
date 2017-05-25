@@ -110,6 +110,14 @@ The default behaviour can be changed with the following directives:
 
 	Default is not set.
 
+    LookupUserDomain name
+
+	Name of the SSSD domain where the user was found.
+
+	Example: LookupUserDomain REMOTE_USER_DOMAIN
+
+	Default is not set.
+
     LookupUserGroups name [separator]
 
 	Name of the note and/or environment variable for the list of groups
